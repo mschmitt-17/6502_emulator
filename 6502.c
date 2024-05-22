@@ -24,7 +24,7 @@ void process_line (sf_t *sf) {
     switch (sf->memory[sf->pc]) { 
         case OP_BRK:
             sf->memory[sf->esp--] = (sf->pc+1) & 0x00FF; // push low byte of PC for next instruction
-            sf->memory[sf->esp--] = ((sf->pc+1) & 0xFF00) >> 8; // push high byte of PC for next instruction
+            sf->memory[sf->esp--] = (sf->pc+1) >> 8; // push high byte of PC for next instruction
             sf->memory[sf->esp--] = sf->status; // push flags
             sf->status |= (1 << INTERRUPT_INDEX);
             sf->status |= (1 << BREAK_INDEX);
@@ -52,13 +52,13 @@ void process_line (sf_t *sf) {
         case OP_JSR:
             // push return address to stack
             sf->memory[sf->esp--] = (sf->pc + 3) & 0x00FF;
-            sf->memory[sf->esp--] = ((sf->pc + 3) & 0xFF00) >> 8;
+            sf->memory[sf->esp--] = (sf->pc + 3) >> 8;
             // set pc to address provided to jump instruction
             sf->pc = (sf->memory[sf->pc+2] << 8)|sf->memory[sf->pc+1];
             break;
 
         case OP_PLP:
-            sf->status = sf->memory[sf->esp++];
+            sf->status = sf->memory[++sf->esp];
             sf->pc++;
             break;
 
@@ -84,33 +84,53 @@ void process_line (sf_t *sf) {
 
         case OP_PHA:
             sf->memory[sf->esp--] = sf->accumulator;
+            sf->pc++;
             break;
 
         case OP_JMP:
+            sf->pc = (sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1];
             break;
-        // BVC
-        case 0x50:
+
+        case OP_BVC:
+            if (!(sf->status & (1 << OVERFLOW_INDEX))) {
+                sf->pc += sf->memory[sf->pc + 1];
+            } else {
+                sf->pc += 2;
+            }
             break;
-        // CLI
-        case 0x58:
+
+        case OP_CLI:
+            sf->status &= ~(1 << INTERRUPT_INDEX);
+            sf->pc++;
             break;
-        // RTS
-        case 0x60:
+
+        case OP_RTS:
             sf->pc = sf->memory[++sf->esp] << 8;
             sf->pc |= sf->memory[++sf->esp];
             // don't increment PC after this because in JSR we push PC for next instruction
             break;
-        // PLA
-        case 0x68:
+
+        case OP_PLA:
+            sf->accumulator = sf->memory[++sf->esp];
+            sf->pc++;
             break;
-        // JMP (ind)
-        case 0x6C:
+        
+        case OP_JI:
+            sf->pc = ((sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + 1]) << 8) |
+                        (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]]);
             break;
-        // BVS
-        case 0x70:
+
+        case OP_BVS:
+            if (sf->status & (1 << OVERFLOW_INDEX)) {
+                sf->pc += sf->memory[sf->pc + 1];
+            } else {
+                sf->pc += 2;
+            }
             break;
         // SEI
-        case 0x78:
+        case OP_SEI:
+            sf->status |= (1 << INTERRUPT_INDEX);
+            sf->pc++;
             break;
         // DEY
         case 0x88:
@@ -136,8 +156,10 @@ void process_line (sf_t *sf) {
         // BCS
         case 0xB0:
             break;
-        // CLV
-        case 0xB8:
+
+        case OP_CLV:
+            sf->status &= ~(1 << OVERFLOW_INDEX);
+            sf->pc++;
             break;
         // TSX
         case 0xBA:
@@ -151,8 +173,10 @@ void process_line (sf_t *sf) {
         // BNE
         case 0xD0:
             break;
-        // CLD
-        case 0xD8:
+
+        case OP_CLD:
+            sf->status &= ~(1 << DECIMAL_INDEX);
+            sf->pc++;
             break;
         // INX
         case 0xE8:
@@ -164,7 +188,9 @@ void process_line (sf_t *sf) {
         case 0xF0:
             break;
         // SED
-        case 0xF8:
+        case OP_SED:
+            sf->status |= (1 << DECIMAL_INDEX);
+            sf->pc++;
             break;
         default:
             // switch case for other shit here

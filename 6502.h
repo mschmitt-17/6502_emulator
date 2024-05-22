@@ -37,13 +37,17 @@
 #define OP_JSR      0x20 // jump to subroutine after pushing return address to stack
 #define OP_PLP      0x28 // pull processor status from stack
 #define OP_BMI      0x30 // branch on N = 1
-#define OP_SEC      0x38 // 
+#define OP_SEC      0x38 // set carry flag
 #define OP_RTI      0x40 // return from interrupt
-#define OP_PHA      0x48 // 
-#define OP_JMP      0x4C // 
-#define OP_BVC      0x50 //
-#define OP_CLI      0x58 // 
+#define OP_PHA      0x48 // push accumulator to stack
+#define OP_JMP      0x4C // jump to new location
+#define OP_BVC      0x50 // branch on V = 0
+#define OP_CLI      0x58 // clear interrupt disable flag
 #define OP_RTS      0x60 // return from subroutine
+#define OP_PLA      0x68 // pull accumulator from stack
+#define OP_JI       0x6C // jump to new location (indirect addressing)
+#define OP_BVS      0x70 // branch on V = 1
+#define OP_SEI      0x78 // set interrupt disable flag
 #define OP_
 #define OP_
 #define OP_
@@ -68,23 +72,17 @@
 #define OP_
 #define OP_
 #define OP_
+#define OP_CLV      0xB8 // clear overflow flag
 #define OP_
 #define OP_
 #define OP_
 #define OP_
+#define OP_CLD      0xD8 // clear decimal flag
 #define OP_
 #define OP_
 #define OP_
 #define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
+#define OP_SED      0xF8 // set decimal mode
 
 
 typedef struct sf {
