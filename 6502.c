@@ -127,71 +127,113 @@ void process_line (sf_t *sf) {
                 sf->pc += 2;
             }
             break;
-        // SEI
+
         case OP_SEI:
             sf->status |= (1 << INTERRUPT_INDEX);
             sf->pc++;
             break;
-        // DEY
-        case 0x88:
+
+        case OP_DEY:
+            sf->y_index--;
+            sf->pc++;
             break;
-        // TXA
-        case 0x8A:
+
+        case OP_TXA:
+            sf->accumulator = sf->x_index;
+            sf->pc++;
             break;
-        // BCC
-        case 0x90:
+
+        case OP_BCC:
+            if (!(sf->status & (1 << CARRY_INDEX))) {
+                sf->pc += sf->memory[sf->pc + 1];
+            } else {
+                sf->pc += 2;
+            }
             break;
-        // TYA
-        case 0x98:
+
+        case OP_TYA:
+            sf->accumulator = sf->y_index;
+            sf->pc++;
             break;
-        // TXS
-        case 0x9A:
+
+        case OP_TXS:
+            sf->esp = sf->x_index;
+            sf->pc++;
             break;
-        // TAY
-        case 0xA8:
+
+        case OP_TAY:
+            sf->y_index = sf->accumulator;
+            sf->pc++;
             break;
-        // TAX
-        case 0xAA:
+
+        case OP_TAX:
+            sf->x_index = sf->accumulator;
+            sf->pc++;
             break;
-        // BCS
-        case 0xB0:
+
+        case OP_BCS:
+            if (sf->status & (1 << CARRY_INDEX)) {
+                sf->pc += sf->memory[sf->pc + 1];
+            } else {
+                sf->pc += 2;
+            }
             break;
 
         case OP_CLV:
             sf->status &= ~(1 << OVERFLOW_INDEX);
             sf->pc++;
             break;
-        // TSX
-        case 0xBA:
+
+        case OP_TSX:
+            sf->x_index = sf->esp;
+            sf->pc++;
             break;
-        // INY
-        case 0xC8:
+
+        case OP_INY:
+            sf->y_index++;
+            sf->pc++;
             break;
-        // DEX
-        case 0xCA:
+
+        case OP_DEX:
+            sf->x_index--;
+            sf->pc++;
             break;
-        // BNE
-        case 0xD0:
+
+        case OP_BNE:
+            if (!(sf->status & (1 << ZERO_INDEX))) {
+                sf->pc += sf->memory[sf->pc + 1];
+            } else {
+                sf->pc += 2;
+            }
             break;
 
         case OP_CLD:
             sf->status &= ~(1 << DECIMAL_INDEX);
             sf->pc++;
             break;
-        // INX
-        case 0xE8:
+
+        case OP_INX:
+            sf->x_index++;
+            sf->pc++;
             break;
-        // NOP
-        case 0xEA:
+
+        case OP_NOP:
+            sf->pc++;
             break;
-        // BEQ
-        case 0xF0:
+
+        case OP_BEQ:
+            if (sf->status & (1 << ZERO_INDEX)) {
+                sf->pc += sf->memory[sf->pc + 1];
+            } else {
+                sf->pc += 2;
+            }
             break;
-        // SED
+
         case OP_SED:
             sf->status |= (1 << DECIMAL_INDEX);
             sf->pc++;
             break;
+
         default:
             // switch case for other shit here
             switch (((sf->memory[sf->pc] & AAA_BITMASK) >> 3) | sf->memory[sf->pc] & CC_BITMASK) {

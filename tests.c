@@ -2,6 +2,47 @@
 #include "tests.h"
 #include "assert.h"
 
+// helper function for tests that should branch when flag is not set
+static int branch_not_set_test(sf_t *sf, uint8_t opcode, uint8_t flag_index) {
+    unsigned char offset = 0xF6;
+    sf->memory[ROM_START] = opcode;
+    sf->memory[ROM_START + 1] = offset;
+    sf->status |= (1 << flag_index);
+    // test when flag = 1
+    process_line(sf);
+    if ((sf->pc == ROM_START + offset) || sf->pc != ROM_START + 2) {
+        return -1;
+    }
+    sf->pc = ROM_START;
+    sf->status &= (~(1 << flag_index));
+    // test when flag = 0
+    process_line(sf);
+    if (sf->pc != ROM_START + offset) {
+        return -1;
+    }
+    return 0;
+}
+
+// helper function for tests that should branch when flag is set
+static int branch_set_test(sf_t *sf, uint8_t opcode, uint8_t flag_index) {
+    unsigned char offset = 0xF6;
+    sf->memory[ROM_START] = opcode;
+    sf->memory[ROM_START + 1] = offset;
+    // test when flag = 0
+    process_line(sf);
+    if ((sf->pc == ROM_START + offset) || sf->pc != ROM_START + 2) {
+        return -1;
+    }
+    sf->pc = ROM_START;
+    sf->status |= (1 << flag_index);
+    // test when flag = 1
+    process_line(sf);
+    if (sf->pc != ROM_START + offset) {
+        return -1;
+    }
+    return 0;
+}
+
 static int BRK_RTI_TEST(sf_t *sf) {
     sf->memory[IRQ_ADDRESS] = OP_RTI;
     sf->memory[ROM_START] = OP_BRK;
@@ -31,23 +72,7 @@ static int PHP_PLP_TEST(sf_t *sf) {
 }
 
 static int BPL_TEST(sf_t *sf) {
-    unsigned char offset = 0xF6;
-    sf->memory[ROM_START] = OP_BPL;
-    sf->memory[ROM_START + 1] = offset;
-    sf->status |= (1 << NEGATIVE_INDEX);
-    // test when N = 1
-    process_line(sf);
-    if ((sf->pc == ROM_START + offset) || sf->pc != ROM_START + 2) {
-        return -1;
-    }
-    sf->pc = ROM_START;
-    sf->status &= (~(1 << NEGATIVE_INDEX));
-    // test when N = 0
-    process_line(sf);
-    if (sf->pc != ROM_START + offset) {
-        return -1;
-    }
-    return 0;
+    return branch_not_set_test(sf, OP_BPL, NEGATIVE_INDEX);
 }
 
 static int CLC_CLD_CLI_CLV_TEST(sf_t *sf) {
@@ -84,22 +109,7 @@ static int JSR_RTS_TEST(sf_t *sf) {
 }
 
 static int BMI_TEST(sf_t *sf) {
-    unsigned char offset = 0xF6;
-    sf->memory[ROM_START] = OP_BMI;
-    sf->memory[ROM_START + 1] = offset;
-    // test when N = 0
-    process_line(sf);
-    if ((sf->pc == ROM_START + offset) || sf->pc != ROM_START + 2) {
-        return -1;
-    }
-    sf->pc = ROM_START;
-    sf->status |= (1 << NEGATIVE_INDEX);
-    // test when N = 1
-    process_line(sf);
-    if (sf->pc != ROM_START + offset) {
-        return -1;
-    }
-    return 0;
+    branch_set_test(sf, OP_BMI, NEGATIVE_INDEX);
 }
 
 static int SEC_SED_SEI_TEST(sf_t *sf) {
@@ -142,42 +152,11 @@ static int JMP_TEST(sf_t *sf) {
 }
 
 static int BVC_TEST(sf_t *sf) {
-    unsigned char offset = 0xF6;
-    sf->memory[ROM_START] = OP_BVC;
-    sf->memory[ROM_START + 1] = offset;
-    // test when V = 1
-    sf->status |= (1 << OVERFLOW_INDEX);
-    process_line(sf);
-    if ((sf->pc == ROM_START + offset) || sf->pc != ROM_START + 2) {
-        return -1;
-    }
-    sf->pc = ROM_START;
-    sf->status &= ~(1 << OVERFLOW_INDEX);
-    // test when V = 0
-    process_line(sf);
-    if (sf->pc != ROM_START + offset) {
-        return -1;
-    }
-    return 0;
+    return branch_not_set_test(sf, OP_BVC, OVERFLOW_INDEX);
 }
 
 static int BVS_TEST(sf_t *sf) {
-    unsigned char offset = 0xF6;
-    sf->memory[ROM_START] = OP_BVS;
-    sf->memory[ROM_START + 1] = offset;
-    // test when V = 0
-    process_line(sf);
-    if ((sf->pc == ROM_START + offset) || sf->pc != ROM_START + 2) {
-        return -1;
-    }
-    sf->pc = ROM_START;
-    sf->status |= (1 << OVERFLOW_INDEX);
-    // test when V = 0
-    process_line(sf);
-    if (sf->pc != ROM_START + offset) {
-        return -1;
-    }
-    return 0;
+    return branch_set_test(sf, OP_BVS, OVERFLOW_INDEX);
 }
 
 static int JI_TEST(sf_t *sf) {
@@ -195,6 +174,101 @@ static int JI_TEST(sf_t *sf) {
     return 0;
 }
 
+static int TXA_TYA_TEST(sf_t *sf) {
+    sf->memory[ROM_START] = OP_TXA;
+    sf->memory[ROM_START + 1] = OP_TYA;
+    sf->x_index = 0x12;
+    sf->y_index = 0x34;
+    process_line(sf);
+    if (sf->accumulator != sf->x_index) {
+        return -1;
+    }
+    process_line(sf);
+    if (sf->accumulator != sf->y_index) {
+        return -1;
+    }
+    return 0;
+}
+
+static int BCC_TEST(sf_t *sf) {
+    branch_not_set_test(sf, OP_BCC, CARRY_INDEX);
+}
+
+static int TXS_TEST(sf_t *sf) {
+    sf->memory[ROM_START] = OP_TXS;
+    sf->x_index = 0x12;
+    process_line(sf);
+    if (sf->esp != sf->x_index) {
+        return -1;
+    }
+    return 0;
+}
+
+static int TAX_TAY_TEST(sf_t *sf) {
+    sf->memory[ROM_START] = OP_TAX;
+    sf->memory[ROM_START + 1] = OP_TAY;
+    sf->accumulator = 0x76;
+    process_line(sf);
+    process_line(sf);
+    if ((sf->x_index != sf->accumulator) || (sf->y_index != sf->accumulator)) {
+        return -1;
+    }
+    return 0;
+}
+
+static int BCS_TEST(sf_t *sf) {
+    branch_set_test(sf, OP_BCS, CARRY_INDEX);
+}
+
+static int TSX_TEST(sf_t *sf) {
+    sf->memory[ROM_START] = OP_TSX;
+    sf->esp = 0x12;
+    process_line(sf);
+    if (sf->x_index != sf->esp) {
+        return -1;
+    }
+    return 0;
+}
+
+static int INX_INY_TEST(sf_t *sf) {
+    sf->memory[ROM_START] = OP_INX;
+    sf->memory[ROM_START + 1] = OP_INY;
+    process_line(sf);
+    process_line(sf);
+    if ((sf->x_index != 1) || (sf->y_index != 1)) {
+        return -1;
+    }
+    return 0;
+}
+
+static int DEX_DEY_TEST(sf_t *sf) {
+    sf->memory[ROM_START] = OP_DEX;
+    sf->memory[ROM_START + 1] = OP_DEY;
+    process_line(sf);
+    process_line(sf);
+    if ((sf->x_index != 0xFF) || (sf->y_index != 0xFF)) { // unsigned values will overflow
+        return -1;
+    }
+    return 0;
+}
+
+static int BNE_TEST(sf_t *sf) {
+    branch_not_set_test(sf, OP_BNE, ZERO_INDEX);
+}
+
+static int NOP_TEST(sf_t *sf) {
+    sf->memory[ROM_START] = OP_NOP;
+    process_line(sf);
+    if (sf->pc != ROM_START + 1) {
+        return -1;
+    }
+    return 0;
+}
+
+static int BEQ_TEST(sf_t *sf) {
+    branch_set_test(sf, OP_BEQ, ZERO_INDEX);
+}
+
 static int run_test(sf_t *sf, int (*test_ptr)(sf_t *), char *test_name) {
     initialize_regs(sf);
 
@@ -203,8 +277,6 @@ static int run_test(sf_t *sf, int (*test_ptr)(sf_t *), char *test_name) {
         return -1;
     }
 }
-
-
 
 int run_tests(sf_t *sf) {
     assert(run_test(sf, BRK_RTI_TEST, "BRK_RTI_TEST") == 0);
@@ -218,6 +290,18 @@ int run_tests(sf_t *sf) {
     assert(run_test(sf, BVC_TEST, "BVC_TEST") == 0);
     assert(run_test(sf, BVS_TEST, "BVS_TEST") == 0);
     assert(run_test(sf, JI_TEST, "JI_TEST") == 0);
+    assert(run_test(sf, TXA_TYA_TEST, "TXA_TYA_TEST") == 0);
+    assert(run_test(sf, BCC_TEST, "BCC_TEST") == 0);
+    assert(run_test(sf, TXS_TEST, "TXS_TEST") == 0);
+    assert(run_test(sf, TAX_TAY_TEST, "TAX_TAY_TEST") == 0);
+    assert(run_test(sf, BCS_TEST, "BCS_TEST") == 0);
+    assert(run_test(sf, TSX_TEST, "TSX_TEST") == 0);
+    assert(run_test(sf, INX_INY_TEST, "INX_INY_TEST") == 0);
+    assert(run_test(sf, DEX_DEY_TEST, "DEX_DEY_TEST") == 0);
+    assert(run_test(sf, BNE_TEST, "BNE_TEST") == 0);
+    assert(run_test(sf, NOP_TEST, "NOP_TEST") == 0);
+    assert(run_test(sf, BEQ_TEST, "BEQ_TEST") == 0);
+
     printf("ALL TESTS PASSED!\n");
     return 0;
 }

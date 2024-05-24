@@ -48,40 +48,23 @@
 #define OP_JI       0x6C // jump to new location (indirect addressing)
 #define OP_BVS      0x70 // branch on V = 1
 #define OP_SEI      0x78 // set interrupt disable flag
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
-#define OP_
+#define OP_DEY      0x88 // decrement index y by one
+#define OP_TXA      0x8A // transfer index x to accumulator
+#define OP_BCC      0x90 // branch on carry clear
+#define OP_TYA      0x98 // transfer index y to accumulator
+#define OP_TXS      0x9A // transfer index x to stack pointer
+#define OP_TAY      0xA8 // transfer accumulator to index y
+#define OP_TAX      0xAA // transfer accumulator to index x
+#define OP_BCS      0xB0 // branch on carry set
 #define OP_CLV      0xB8 // clear overflow flag
-#define OP_
-#define OP_
-#define OP_
-#define OP_
+#define OP_TSX      0xBA // transfer stack pointer to index x
+#define OP_INY      0xC8 // increment index y by 1
+#define OP_DEX      0xCA // decrement index x by 1
+#define OP_BNE      0xD0 // branch on zero flag clear
 #define OP_CLD      0xD8 // clear decimal flag
-#define OP_
-#define OP_
-#define OP_
-#define OP_
+#define OP_INX      0xE8 // increment index x by 1
+#define OP_NOP      0xEA // no op
+#define OP_BEQ      0xF0 // branch on zero flag set
 #define OP_SED      0xF8 // set decimal mode
 
 
