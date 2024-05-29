@@ -269,6 +269,149 @@ static int BEQ_TEST(sf_t *sf) {
     branch_set_test(sf, OP_BEQ, ZERO_INDEX);
 }
 
+// helper function to load memory with values for indirect x addressing mode
+static void ind_x_load(sf_t *sf, uint8_t opcode, uint8_t accum_init, uint8_t or_value) {
+    sf->accumulator = accum_init;
+    sf->memory[ROM_START] = opcode | (ADDR_MODE_IND_X << 2);
+    sf->memory[ROM_START + 1] = 0xFE; // test wraparound
+    sf->x_index = 0x05;
+    sf->memory[(0xFE + sf->x_index) % 0xFF] = 0x15;
+    sf->memory[(0xFE + sf->x_index + 1) % 0xFF] = 0x24;
+    sf->memory[0x2415] = or_value;
+}
+
+// helper function to load memory with values for zero-page addressing mode
+static void zpg_load(sf_t *sf, uint8_t opcode, uint8_t accum_init, uint8_t or_value) {
+    sf->accumulator = accum_init;
+    sf->memory[ROM_START] = opcode | (ADDR_MODE_ZPG << 2);
+    sf->memory[ROM_START + 1] = 0x3E;
+    sf->memory[0x003E] = or_value;
+}
+
+// helper function to load memory with values for immediate addressing mode
+static void imm_load(sf_t *sf, uint8_t opcode, uint8_t accum_init, uint8_t or_value) {
+    sf->accumulator = accum_init;
+    sf->memory[ROM_START] = opcode | (ADDR_MODE_IMM << 2);
+    sf->memory[ROM_START + 1] = or_value;
+}
+
+// helper function to load memory with values for absolute addressing mode
+static void abs_load(sf_t *sf, uint8_t opcode, uint8_t accum_init, uint8_t or_value) {
+    sf->accumulator = accum_init;
+    sf->memory[ROM_START] = opcode | (ADDR_MODE_ABS << 2);
+    sf->memory[ROM_START + 1] = 0x3E;
+    sf->memory[ROM_START + 2] = 0x20;
+    sf->memory[0x203E] = or_value;
+}
+
+// helper function to load memory with values for indirect y addressing mode
+static void ind_y_load(sf_t *sf, uint8_t opcode, uint8_t accum_init, uint8_t or_value) {
+    sf->accumulator = accum_init;
+    sf->memory[ROM_START] = opcode | (ADDR_MODE_IND_Y << 2);
+    sf->memory[ROM_START + 1] = 0x4C;
+    sf->y_index = 0x05;
+    sf->memory[0x4C] = 0x00;
+    sf->memory[0x4D] = 0x21;
+    sf->memory[0x2100 + sf->y_index] = or_value;
+}
+
+// helper function to load memory with values for zero-page x-indexed addressing mode
+static void zpg_x_load(sf_t *sf, uint8_t opcode, uint8_t accum_init, uint8_t or_value) {
+    sf->accumulator = accum_init;
+    sf->memory[ROM_START] = opcode | (ADDR_MODE_ZPG_X << 2);
+    sf->memory[ROM_START + 1] = 0x3E;
+    sf->y_index = 0x05;
+    sf->memory[0x3E + sf->y_index] = or_value;
+}
+
+// helper function to load memory with values for absolute y-indexed addressing mode
+static void abs_y_load(sf_t *sf, uint8_t opcode, uint8_t accum_init, uint8_t or_value) {
+    sf->accumulator = accum_init;
+    sf->memory[ROM_START] = opcode | (ADDR_MODE_ABS_Y << 2);
+    sf->memory[ROM_START + 1] = 0x3E;
+    sf->memory[ROM_START + 2] = 0x20;
+    sf->y_index = 0x05;
+    sf->memory[0x203E + sf->y_index] = or_value;
+}
+
+// helper function to load memory with values for absolute x-indexed addressing mode
+static void abs_x_load(sf_t *sf, uint8_t opcode, uint8_t accum_init, uint8_t or_value) {
+    sf->accumulator = accum_init;
+    sf->memory[ROM_START] = opcode | (ADDR_MODE_ABS_X << 2);
+    sf->memory[ROM_START + 1] = 0x3E;
+    sf->memory[ROM_START + 2] = 0x20;
+    sf->x_index = 0x05;
+    sf->memory[0x203E + sf->x_index] = or_value;
+}
+
+static int ORA_TEST(sf_t *sf) {
+    /* example taken from https://www.zophar.net/fileuploads/2/10532krzvs/6502.txt */
+    // pre-indexed indirect addressing
+    ind_x_load(sf, OP_ORA, 0x22, 0x6E);
+    process_line(sf);
+    if (sf->accumulator != (0x22 | 0x6E)) {
+        return -1;
+    }
+
+    // zero page absolute addressing
+    sf->pc = ROM_START;
+    zpg_load(sf, OP_ORA, 0x22, 0x6E);
+    process_line(sf);
+    if (sf->accumulator != (0x22 | 0x6E)) {
+        return -1;
+    }
+
+    //immediate addressing
+    sf->pc = ROM_START;
+    imm_load(sf, OP_ORA, 0x22, 0x6E);
+    process_line(sf);
+    if (sf->accumulator != (0x22 | 0x6E)) {
+        return -1;
+    }
+
+    // absolute addressing
+    sf->pc = ROM_START;
+    abs_load(sf, OP_ORA, 0x22, 0x6E);
+    process_line(sf);
+    if (sf->accumulator != (0x22 | 0x6E)) {
+        return -1;
+    }
+
+    // post-indexed indirect addressing
+    sf->pc = ROM_START;
+    ind_y_load(sf, OP_ORA, 0x22, 0x6E);
+    process_line(sf);
+    if (sf->accumulator != (0x22 | 0x6E)) {
+        return -1;
+    }
+
+    // zero-page x-indexed addressing
+    sf->pc = ROM_START;
+    zpg_x_load(sf, OP_ORA, 0x22, 0x6E);
+    process_line(sf);
+    if (sf->accumulator != (0x22 | 0x6E)) {
+        return -1;
+    }
+
+    // absolute y-indexed addressing
+    sf->pc = ROM_START;
+    abs_y_load(sf, OP_ORA, 0x22, 0x6E);
+    process_line(sf);
+    if (sf->accumulator != (0x22 | 0x6E)) {
+        return -1;
+    }
+
+    // absolute x-indexed addressing
+    sf->pc = ROM_START;
+    abs_x_load(sf, OP_ORA, 0x22, 0x6E);
+    process_line(sf);
+    if (sf->accumulator != (0x22 | 0x6E)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 static int run_test(sf_t *sf, int (*test_ptr)(sf_t *), char *test_name) {
     initialize_regs(sf);
 
@@ -301,6 +444,7 @@ int run_tests(sf_t *sf) {
     assert(run_test(sf, BNE_TEST, "BNE_TEST") == 0);
     assert(run_test(sf, NOP_TEST, "NOP_TEST") == 0);
     assert(run_test(sf, BEQ_TEST, "BEQ_TEST") == 0);
+    assert(run_test(sf, ORA_TEST, "ORA_TEST") == 0);
 
     printf("ALL TESTS PASSED!\n");
     return 0;

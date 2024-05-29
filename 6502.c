@@ -237,49 +237,508 @@ void process_line (sf_t *sf) {
         default:
             // switch case for other shit here
             switch (((sf->memory[sf->pc] & AAA_BITMASK) >> 3) | sf->memory[sf->pc] & CC_BITMASK) {
-                // OR
-                case 0x01:
+                case OP_ORA:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            sf->accumulator = sf->accumulator |
+                                              sf->memory[((sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) |
+                                               (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF]))];
+                            sf->pc += 2;
+                            break;
+                        case ADDR_MODE_ZPG:
+                            sf->accumulator = sf->accumulator | sf->memory[sf->memory[sf->pc + 1]];
+                            sf->pc += 2;
+                            break;
+                        case ADDR_MODE_IMM:
+                            sf->accumulator = sf->accumulator | sf->memory[sf->pc + 1];
+                            sf->pc += 2;
+                            break;
+                        case ADDR_MODE_ABS:
+                            sf->accumulator = sf->accumulator | (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]]);
+                            sf->pc += 3;
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            sf->accumulator = sf->accumulator |
+                                              sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|
+                                               sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index];
+                            sf->pc += 2;
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            sf->accumulator = (sf->accumulator|sf->memory[sf->memory[sf->pc + 1] + sf->x_index]);
+                            sf->pc += 2;
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            sf->accumulator = sf->accumulator | sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index];
+                            sf->pc += 3;
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            sf->accumulator = sf->accumulator | sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index];
+                            sf->pc += 3;
+                            break;
+                        default:
+                            break;
+                    }
                     break;
-                // ASL
-                case 0x02:
-                // BIT
-                case 0x04:
-                // AND
-                case 0x05:
-                // ROL
-                case 0x06:
-                // EOR
-                case 0x09:
-                // LSR
-                case 0x0A:
-                // ADC
-                case 0x0D:
-                // ROR
-                case 0x0E:
-                // STY
-                case 0x10:
-                // STA
-                case 0x11:
-                // STX
-                case 0x12:
-                // LDY
-                case 0x14:
-                // LDA
-                case 0x15:
-                // LDX
-                case 0x16:
-                // CPY
-                case 0x18:
-                // CMP
-                case 0x19:
-                // DEC
-                case 0x1A:
-                // CPX
-                case 0x1C:
-                // SBC
-                case 0x1D:
-                // INC
-                case 0x1E:
+
+                case OP_ASL:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_BIT:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_AND:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_ROL:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_EOR:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_LSR:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_ADC:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_ROR:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_STY:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_STA:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_STX:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_LDY:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_LDA:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_LDX:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_CPY:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_CMP:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_DEC:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_CPX:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_SBC:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+
+                case OP_INC:
+                    switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
+                        case ADDR_MODE_IND_X:
+                            break;
+                        case ADDR_MODE_ZPG:
+                            break;
+                        case ADDR_MODE_IMM:
+                            break;
+                        case ADDR_MODE_ABS:
+                            break;
+                        case ADDR_MODE_IND_Y:
+                            break;
+                        case ADDR_MODE_ZPG_X:
+                            break;
+                        case ADDR_MODE_ABS_Y:
+                            break;
+                        case ADDR_MODE_ABS_X:
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
             }
             break;
 
