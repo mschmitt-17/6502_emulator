@@ -393,67 +393,93 @@ static void abs_x_load(sf_t *sf, uint8_t opcode, uint8_t accum_init, uint8_t or_
 }
 
 static int ORA_TEST(sf_t *sf) {
-    /* example taken from https://www.zophar.net/fileuploads/2/10532krzvs/6502.txt */
-    // pre-indexed indirect addressing
-    ind_x_load(sf, OP_ORA, 0x22, 0x6E);
+    sf->x_index = 0x3D;
+    sf->accumulator = 0x22;
+    sf->memory[ROM_START] = OP_ORA | (ADDR_MODE_IND_X << 2);
+    sf->memory[ROM_START + 1] = 0x91;
+    sf->memory[0xCE] = 0xEF;
+    sf->memory[0xCF] = 0xBE;
+    sf->memory[0xBEEF] = 0x6E;
     process_line(sf);
-    if (sf->accumulator != (0x22 | 0x6E)) {
+    if (sf->accumulator != (0x22 | 0x6E) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // zero page absolute addressing
     sf->pc = ROM_START;
-    zpg_load(sf, OP_ORA, 0x22, 0x6E);
+    sf->accumulator = 0x92;
+    sf->memory[ROM_START] = OP_ORA | (ADDR_MODE_ZPG << 2);
+    sf->memory[ROM_START + 1] = 0x01;
+    sf->memory[0x01] = 0x14;
     process_line(sf);
-    if (sf->accumulator != (0x22 | 0x6E)) {
+    if (sf->accumulator != (0x92 | 0x14) || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    //immediate addressing
     sf->pc = ROM_START;
-    imm_load(sf, OP_ORA, 0x22, 0x6E);
+    sf->accumulator = 0x12;
+    sf->memory[ROM_START] = OP_ORA | (ADDR_MODE_IMM << 2);
+    sf->memory[ROM_START + 1] = 0x41;
     process_line(sf);
-    if (sf->accumulator != (0x22 | 0x6E)) {
+    if (sf->accumulator != (0x12 | 0x41) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // absolute addressing
     sf->pc = ROM_START;
-    abs_load(sf, OP_ORA, 0x22, 0x6E);
+    sf->accumulator = 0x00;
+    sf->memory[ROM_START] = OP_ORA | (ADDR_MODE_ABS << 2);
+    sf->memory[ROM_START + 1] = 0x2B;
+    sf->memory[ROM_START + 2] = 0xEE;
+    sf->memory[0xEE2B] = 0x00;
     process_line(sf);
-    if (sf->accumulator != (0x22 | 0x6E)) {
+    if (sf->accumulator != 0x00 || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 2)) {
         return -1;
     }
 
-    // post-indexed indirect addressing
     sf->pc = ROM_START;
-    ind_y_load(sf, OP_ORA, 0x22, 0x6E);
+    sf->y_index = 0x08;
+    sf->accumulator = 0x12;
+    sf->memory[ROM_START] = OP_ORA | (ADDR_MODE_IND_Y << 2);
+    sf->memory[ROM_START + 1] = 0xFF;
+    sf->memory[0xFF] = 0x25;
+    sf->memory[0x100] = 0x1D;
+    sf->memory[0x1D2D] = 0x80;
     process_line(sf);
-    if (sf->accumulator != (0x22 | 0x6E)) {
+    if (sf->accumulator != 0x92 || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // zero-page x-indexed addressing
     sf->pc = ROM_START;
-    zpg_x_load(sf, OP_ORA, 0x22, 0x6E);
+    sf->x_index = 0xF4;
+    sf->accumulator = 0x00;
+    sf->memory[ROM_START] = OP_ORA | (ADDR_MODE_ZPG_X << 2);
+    sf->memory[ROM_START + 1] = 0x02;
+    sf->memory[0xF6] = 0x67;
     process_line(sf);
-    if (sf->accumulator != (0x22 | 0x6E)) {
+    if (sf->accumulator != 0x67 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // absolute y-indexed addressing
     sf->pc = ROM_START;
-    abs_y_load(sf, OP_ORA, 0x22, 0x6E);
+    sf->y_index = 0xE4;
+    sf->accumulator = 0x72;
+    sf->memory[ROM_START] = OP_ORA | (ADDR_MODE_ABS_Y << 2);
+    sf->memory[ROM_START + 1] = 0x3A;
+    sf->memory[ROM_START + 2] = 0xFF;
+    sf->memory[(0xFF3A + 0xE4) % 0xFFFF] = 0x00;
     process_line(sf);
-    if (sf->accumulator != (0x22 | 0x6E)) {
+    if (sf->accumulator != 0x72 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // absolute x-indexed addressing
     sf->pc = ROM_START;
-    abs_x_load(sf, OP_ORA, 0x22, 0x6E);
+    sf->x_index = 0xE4;
+    sf->accumulator = 0x72;
+    sf->memory[ROM_START] = OP_ORA | (ADDR_MODE_ABS_X << 2);
+    sf->memory[ROM_START + 1] = 0x3A;
+    sf->memory[ROM_START + 2] = 0xFF;
+    sf->memory[(0xFF3A + 0xE4) % 0xFFFF] = 0x00;
     process_line(sf);
-    if (sf->accumulator != (0x22 | 0x6E)) {
+    if (sf->accumulator != 0x72 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
@@ -464,7 +490,7 @@ static int ASL_TEST(sf_t *sf) {
     sf->accumulator = 0x81;
     sf->memory[ROM_START] = OP_ASL | (ADDR_MODE_ACCUM << 2);
     process_line(sf);
-    if ((!(sf->status & (1 << CARRY_INDEX))) || sf->accumulator != 0x02) {
+    if (sf->accumulator != 0x02 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -473,7 +499,7 @@ static int ASL_TEST(sf_t *sf) {
     sf->memory[ROM_START + 1] = 0x18;
     sf->memory[0x18] = 0x67;
     process_line(sf);
-    if (sf->memory[0x18] != (0x67 << 1) || (!(sf->status & (1 << NEGATIVE_INDEX)))) {
+    if (sf->memory[0x18] != 0xCE || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 0)) {
         return -1;
     } 
 
@@ -483,7 +509,7 @@ static int ASL_TEST(sf_t *sf) {
     sf->memory[ROM_START + 2] = 0x24;
     sf->memory[0x2415] = 0x80;
     process_line(sf);
-    if (sf->memory[0x2415] != 0 || (!(sf->status & (1 << ZERO_INDEX)))) {
+    if (sf->memory[0x2415] != 0x00 || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 1)) {
         return -1;
     }
 
@@ -491,9 +517,9 @@ static int ASL_TEST(sf_t *sf) {
     sf->x_index = 0x76;
     sf->memory[ROM_START] = OP_ASL | (ADDR_MODE_ZPG_X << 2);
     sf->memory[ROM_START + 1] = 0xFE;
-    sf->memory[(uint16_t)0xFE + 0x76] = 0x47;
+    sf->memory[(0xFE + 0x76) % 0xFF] = 0x47;
     process_line(sf);
-    if (sf->memory[(uint16_t)0xFE + 0x76] != (0x47 << 1)) {
+    if (sf->memory[(0xFE + 0x76) % 0xFF] != 0x8E || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 0)) {
         return -1;
     } 
 
@@ -502,9 +528,9 @@ static int ASL_TEST(sf_t *sf) {
     sf->memory[ROM_START] = OP_ASL | (ADDR_MODE_ABS_X << 2);
     sf->memory[ROM_START + 1] = 0x15;
     sf->memory[ROM_START + 2] = 0x24;
-    sf->memory[0x2415 + 0x17] = 0x47;
+    sf->memory[0x242C] = 0x47;
     process_line(sf);
-    if (sf->memory[0x2415 + 0x17] != (uint8_t)(0x47 << 1)) {
+    if (sf->memory[0x242C] != 0x8E || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
@@ -514,20 +540,19 @@ static int ASL_TEST(sf_t *sf) {
 static int BIT_TEST(sf_t *sf) {
     sf->memory[ROM_START] = OP_BIT | (ADDR_MODE_ZPG << 2);
     sf->memory[ROM_START + 1] = 0x21;
-    sf->memory[0x21] = 0b11000000;
-    sf->accumulator = 0b00111111;
+    sf->memory[0x21] = 0b00111111;
+    sf->accumulator = 0b11000000;
     process_line(sf);
-    if ((!(sf->status & (1 << NEGATIVE_INDEX))) || (!(sf->status & (1 << OVERFLOW_INDEX))) || (!(sf->status & (1 << ZERO_INDEX)))) {
+    if (check_flags(sf->status, 0, 0, 2, 2, 2, 1, 2)) {
         return -1;
     }
     
     sf->pc = ROM_START;
-    sf->status = 0x00;
     sf->memory[ROM_START] = OP_BIT | (ADDR_MODE_ABS << 2);
     sf->memory[ROM_START + 2] = 0x12;
-    sf->memory[0x1221] = 0b00111111;
+    sf->memory[0x1221] = 0b11000000;
     process_line(sf);
-    if ((sf->status & (1 << NEGATIVE_INDEX)) || (sf->status & (1 << OVERFLOW_INDEX)) || (sf->status & (1 << ZERO_INDEX))) {
+    if (check_flags(sf->status, 1, 1, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
@@ -535,66 +560,93 @@ static int BIT_TEST(sf_t *sf) {
 }
 
 static int AND_TEST(sf_t *sf) {
-    // pre-indexed indirect addressing
-    ind_x_load(sf, OP_AND, 0x22, 0x6E);
+    sf->x_index = 0x3D;
+    sf->accumulator = 0x22;
+    sf->memory[ROM_START] = OP_AND | (ADDR_MODE_IND_X << 2);
+    sf->memory[ROM_START + 1] = 0x91;
+    sf->memory[0xCE] = 0xEF;
+    sf->memory[0xCF] = 0xBE;
+    sf->memory[0xBEEF] = 0x6E;
     process_line(sf);
-    if (sf->accumulator != (0x22 & 0x6E)) {
+    if (sf->accumulator != (0x22 & 0x6E) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // zero page absolute addressing
     sf->pc = ROM_START;
-    zpg_load(sf, OP_AND, 0x22, 0x6E);
+    sf->accumulator = 0x92;
+    sf->memory[ROM_START] = OP_AND | (ADDR_MODE_ZPG << 2);
+    sf->memory[ROM_START + 1] = 0x01;
+    sf->memory[0x01] = 0x81;
     process_line(sf);
-    if (sf->accumulator != (0x22 & 0x6E)) {
+    if (sf->accumulator != (0x92 & 0x81) || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    //immediate addressing
     sf->pc = ROM_START;
-    imm_load(sf, OP_AND, 0x22, 0x6E);
+    sf->accumulator = 0x12;
+    sf->memory[ROM_START] = OP_AND | (ADDR_MODE_IMM << 2);
+    sf->memory[ROM_START + 1] = 0x41;
     process_line(sf);
-    if (sf->accumulator != (0x22 & 0x6E)) {
+    if (sf->accumulator != 0x00 || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 2)) {
         return -1;
     }
 
-    // absolute addressing
     sf->pc = ROM_START;
-    abs_load(sf, OP_AND, 0x22, 0x6E);
+    sf->accumulator = 0x78;
+    sf->memory[ROM_START] = OP_AND | (ADDR_MODE_ABS << 2);
+    sf->memory[ROM_START + 1] = 0x2B;
+    sf->memory[ROM_START + 2] = 0xEE;
+    sf->memory[0xEE2B] = 0x48;
     process_line(sf);
-    if (sf->accumulator != (0x22 & 0x6E)) {
+    if (sf->accumulator != 0x48 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // post-indexed indirect addressing
     sf->pc = ROM_START;
-    ind_y_load(sf, OP_AND, 0x22, 0x6E);
+    sf->y_index = 0x08;
+    sf->accumulator = 0xF3;
+    sf->memory[ROM_START] = OP_AND | (ADDR_MODE_IND_Y << 2);
+    sf->memory[ROM_START + 1] = 0xFF;
+    sf->memory[0xFF] = 0x25;
+    sf->memory[0x100] = 0x1D;
+    sf->memory[0x1D2D] = 0x73;
     process_line(sf);
-    if (sf->accumulator != (0x22 & 0x6E)) {
+    if (sf->accumulator != 0x73 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // zero-page x-indexed addressing
     sf->pc = ROM_START;
-    zpg_x_load(sf, OP_AND, 0x22, 0x6E);
+    sf->x_index = 0xF4;
+    sf->accumulator = 0x00;
+    sf->memory[ROM_START] = OP_AND | (ADDR_MODE_ZPG_X << 2);
+    sf->memory[ROM_START + 1] = 0x02;
+    sf->memory[0xF6] = 0x67;
     process_line(sf);
-    if (sf->accumulator != (0x22 & 0x6E)) {
+    if (sf->accumulator != 0x00 || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 2)) {
         return -1;
     }
 
-    // absolute y-indexed addressing
     sf->pc = ROM_START;
-    abs_y_load(sf, OP_AND, 0x22, 0x6E);
+    sf->y_index = 0xE4;
+    sf->accumulator = 0xF2;
+    sf->memory[ROM_START] = OP_AND | (ADDR_MODE_ABS_Y << 2);
+    sf->memory[ROM_START + 1] = 0x3A;
+    sf->memory[ROM_START + 2] = 0xFF;
+    sf->memory[(0xFF3A + 0xE4) % 0xFFFF] = 0x8F;
     process_line(sf);
-    if (sf->accumulator != (0x22 & 0x6E)) {
+    if (sf->accumulator != 0x82 || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // absolute x-indexed addressing
     sf->pc = ROM_START;
-    abs_x_load(sf, OP_AND, 0x22, 0x6E);
+    sf->x_index = 0xE4;
+    sf->accumulator = 0xF2;
+    sf->memory[ROM_START] = OP_AND | (ADDR_MODE_ABS_X << 2);
+    sf->memory[ROM_START + 1] = 0x3A;
+    sf->memory[ROM_START + 2] = 0xFF;
+    sf->memory[(0xFF3A + 0xE4) % 0xFFFF] = 0x8F;
     process_line(sf);
-    if (sf->accumulator != (0x22 & 0x6E)) {
+    if (sf->accumulator != 0x82 || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
@@ -602,12 +654,12 @@ static int AND_TEST(sf_t *sf) {
 }
 
 static int ROL_TEST(sf_t *sf) {
+    sf->status |= (1 << CARRY_INDEX);
     sf->memory[ROM_START] = OP_ROL | (ADDR_MODE_ZPG << 2);
     sf->memory[ROM_START + 1] = 0x48;
     sf->memory[0x48] = 0xA1;
-    sf->status |= (1 << CARRY_INDEX);
     process_line(sf);
-    if ((!(sf->status & (1 << CARRY_INDEX))) || (sf->memory[0x48] != (((0xA1 << 1) & 0xFF) + 1))) {
+    if (sf->memory[0x48] != (((0xA1 << 1) & 0xFF) + 1) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -616,41 +668,40 @@ static int ROL_TEST(sf_t *sf) {
     sf->memory[ROM_START] = OP_ROL | (ADDR_MODE_ACCUM << 2);
     sf->accumulator = 0x48;
     process_line(sf);
-    if ((sf->accumulator != (0x48 << 1)) || (sf->status & (1 << CARRY_INDEX))) {
+    if (sf->accumulator != (0x48 << 1) || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
     sf->pc = ROM_START;
-    sf->status = 0x00;
+    sf->status = (1 << CARRY_INDEX);
     sf->memory[ROM_START] = OP_ROL | (ADDR_MODE_ABS << 2);
     sf->memory[ROM_START + 1] = 0x54;
     sf->memory[ROM_START + 2] = 0x76;
     sf->memory[0x7654] = 0x63;
     process_line(sf);
-    if ((sf->memory[0x7654] != (0x63 << 1)) || (!(sf->status & (1 << NEGATIVE_INDEX)))) {
+    if (sf->memory[0x7654] != ((0x63 << 1) + 1) || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
     sf->pc = ROM_START;
-    sf->status = 0x00;
+    sf->x_index = 0x07;
     sf->memory[ROM_START] = OP_ROL | (ADDR_MODE_ZPG_X << 2);
     sf->memory[ROM_START + 1] = 0x48;
-    sf->x_index = 0x07;
     sf->memory[0x4F] = 0x80;
     process_line(sf);
-    if ((!(sf->status & (1 << CARRY_INDEX))) || (!(sf->status & (1 << ZERO_INDEX))) || (sf->memory[0x4F] != 0x00)) {
+    if (sf->memory[0x4F] != 0x00 || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 1)) {
         return -1;
     }
 
     sf->pc = ROM_START;
     sf->status = 0x00;
+    sf->x_index = 0x89;
     sf->memory[ROM_START] = OP_ROL | (ADDR_MODE_ABS_X << 2);
     sf->memory[ROM_START + 1] = 0x54;
     sf->memory[ROM_START + 2] = 0x76;
-    sf->x_index = 0x89;
-    sf->memory[0x7654 + 0x89] = 0x63;
+    sf->memory[0x7654 + 0x89] = 0x00;
     process_line(sf);
-    if ((sf->memory[0x7654 + 0x89] != (0x63 << 1)) || (!(sf->status & (1 << NEGATIVE_INDEX)))) {
+    if ((sf->memory[0x7654 + 0x89] != 0x00) || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 0)) {
         return -1;
     }
 
@@ -658,66 +709,93 @@ static int ROL_TEST(sf_t *sf) {
 }
 
 static int EOR_TEST(sf_t *sf) {
-    // pre-indexed indirect addressing
-    ind_x_load(sf, OP_EOR, 0x22, 0x6E);
+    sf->x_index = 0x3D;
+    sf->accumulator = 0x22;
+    sf->memory[ROM_START] = OP_EOR | (ADDR_MODE_IND_X << 2);
+    sf->memory[ROM_START + 1] = 0x91;
+    sf->memory[0xCE] = 0xEF;
+    sf->memory[0xCF] = 0xBE;
+    sf->memory[0xBEEF] = 0x6E;
     process_line(sf);
-    if (sf->accumulator != (0x22 ^ 0x6E)) {
+    if (sf->accumulator != (0x22 ^ 0x6E) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // zero page absolute addressing
     sf->pc = ROM_START;
-    zpg_load(sf, OP_EOR, 0x69, 0x96);
+    sf->accumulator = 0x72;
+    sf->memory[ROM_START] = OP_EOR | (ADDR_MODE_ZPG << 2);
+    sf->memory[ROM_START + 1] = 0x01;
+    sf->memory[0x01] = 0x81;
     process_line(sf);
-    if ((sf->accumulator != (0x69 ^ 0x96)) || (!(sf->status & (1 << NEGATIVE_INDEX)))) {
+    if (sf->accumulator != 0xF3 || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    //immediate addressing
     sf->pc = ROM_START;
-    imm_load(sf, OP_EOR, 0x66, 0x66);
+    sf->accumulator = 0xA0;
+    sf->memory[ROM_START] = OP_EOR | (ADDR_MODE_IMM << 2);
+    sf->memory[ROM_START + 1] = 0xA0;
     process_line(sf);
-    if ((sf->accumulator != (0x66 ^ 0x66)) || (!(sf->status & (1 << ZERO_INDEX)))) {
+    if (sf->accumulator != 0x00 || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 2)) {
         return -1;
     }
 
-    // absolute addressing
     sf->pc = ROM_START;
-    abs_load(sf, OP_EOR, 0x22, 0x6E);
+    sf->accumulator = 0x48;
+    sf->memory[ROM_START] = OP_EOR | (ADDR_MODE_ABS << 2);
+    sf->memory[ROM_START + 1] = 0x2B;
+    sf->memory[ROM_START + 2] = 0xEE;
+    sf->memory[0xEE2B] = 0x20;
     process_line(sf);
-    if (sf->accumulator != (0x22 ^ 0x6E)) {
+    if (sf->accumulator != 0x68 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // post-indexed indirect addressing
     sf->pc = ROM_START;
-    ind_y_load(sf, OP_EOR, 0x22, 0x6E);
+    sf->y_index = 0x08;
+    sf->accumulator = 0xF3;
+    sf->memory[ROM_START] = OP_EOR | (ADDR_MODE_IND_Y << 2);
+    sf->memory[ROM_START + 1] = 0xFF;
+    sf->memory[0xFF] = 0x25;
+    sf->memory[0x100] = 0x1D;
+    sf->memory[0x1D2D] = 0x83;
     process_line(sf);
-    if (sf->accumulator != (0x22 ^ 0x6E)) {
+    if (sf->accumulator != 0x70 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // zero-page x-indexed addressing
     sf->pc = ROM_START;
-    zpg_x_load(sf, OP_EOR, 0x22, 0x6E);
+    sf->x_index = 0xF4;
+    sf->accumulator = 0x00;
+    sf->memory[ROM_START] = OP_EOR | (ADDR_MODE_ZPG_X << 2);
+    sf->memory[ROM_START + 1] = 0x02;
+    sf->memory[0xF6] = 0x67;
     process_line(sf);
-    if (sf->accumulator != (0x22 ^ 0x6E)) {
+    if (sf->accumulator != 0x67 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // absolute y-indexed addressing
     sf->pc = ROM_START;
-    abs_y_load(sf, OP_EOR, 0x22, 0x6E);
+    sf->y_index = 0xE4;
+    sf->accumulator = 0xF2;
+    sf->memory[ROM_START] = OP_EOR | (ADDR_MODE_ABS_Y << 2);
+    sf->memory[ROM_START + 1] = 0x3A;
+    sf->memory[ROM_START + 2] = 0xFF;
+    sf->memory[(0xFF3A + 0xE4) % 0xFFFF] = 0x34;
     process_line(sf);
-    if (sf->accumulator != (0x22 ^ 0x6E)) {
+    if (sf->accumulator != 0xC6 || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
-    // absolute x-indexed addressing
     sf->pc = ROM_START;
-    abs_x_load(sf, OP_EOR, 0x22, 0x6E);
+    sf->x_index = 0xE4;
+    sf->accumulator = 0xF2;
+    sf->memory[ROM_START] = OP_EOR | (ADDR_MODE_ABS_X << 2);
+    sf->memory[ROM_START + 1] = 0x3A;
+    sf->memory[ROM_START + 2] = 0xFF;
+    sf->memory[(0xFF3A + 0xE4) % 0xFFFF] = 0x34;
     process_line(sf);
-    if (sf->accumulator != (0x22 ^ 0x6E)) {
+    if (sf->accumulator != 0xC6 || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
@@ -729,38 +807,35 @@ static int LSR_TEST(sf_t *sf) {
     sf->memory[ROM_START + 1] = 0x48;
     sf->memory[0x48] = 0xA1;
     process_line(sf);
-    if ((!(sf->status & (1 << CARRY_INDEX))) || (sf->memory[0x48] != (0xA1 >> 1))) {
+    if (sf->memory[0x48] != (0xA1 >> 1) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
     sf->pc = ROM_START;
-    sf->status = 0x00;
     sf->memory[ROM_START] = OP_LSR | (ADDR_MODE_ACCUM << 2);
     sf->accumulator = 0x48;
     process_line(sf);
-    if ((sf->accumulator != (0x48 >> 1)) || (sf->status & (1 << CARRY_INDEX))) {
+    if (sf->accumulator != (0x48 >> 1) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
     sf->pc = ROM_START;
-    sf->status = 0x00;
     sf->memory[ROM_START] = OP_LSR | (ADDR_MODE_ABS << 2);
     sf->memory[ROM_START + 1] = 0x54;
     sf->memory[ROM_START + 2] = 0x76;
-    sf->memory[0x7654] = 0x63;
+    sf->memory[0x7654] = 0x00;
     process_line(sf);
-    if ((sf->memory[0x7654] != (0x63 >> 1)) || (!(sf->status & (1 << CARRY_INDEX)))) {
+    if (sf->memory[0x7654] != 0x00 || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 0)) {
         return -1;
     }
 
     sf->pc = ROM_START;
-    sf->status = 0x00;
     sf->memory[ROM_START] = OP_LSR | (ADDR_MODE_ZPG_X << 2);
     sf->memory[ROM_START + 1] = 0x48;
     sf->x_index = 0x07;
     sf->memory[0x4F] = 0x01;
     process_line(sf);
-    if ((!(sf->status & (1 << CARRY_INDEX))) || (!(sf->status & (1 << ZERO_INDEX))) || (sf->memory[0x4F] != 0x00)) {
+    if (sf->memory[0x4F] != 0x00 || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 1)) {
         return -1;
     }
 
@@ -770,9 +845,9 @@ static int LSR_TEST(sf_t *sf) {
     sf->memory[ROM_START + 1] = 0x54;
     sf->memory[ROM_START + 2] = 0x76;
     sf->x_index = 0x89;
-    sf->memory[0x7654 + 0x89] = 0x63;
+    sf->memory[0x7654 + 0x89] = 0x62;
     process_line(sf);
-    if ((sf->memory[0x7654 + 0x89] != (0x63 >> 1)) || (!(sf->status & (1 << CARRY_INDEX)))) {
+    if (sf->memory[0x7654 + 0x89] != (0x62 >> 1) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
@@ -780,74 +855,93 @@ static int LSR_TEST(sf_t *sf) {
 }
 
 static int ADC_TEST(sf_t *sf) {
-    // pre-indexed indirect addressing
-    ind_x_load(sf, OP_ADC, 0x22, 0x6E);
+    sf->x_index = 0x3D;
+    sf->accumulator = 0x22;
+    sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_IND_X << 2);
+    sf->memory[ROM_START + 1] = 0x91;
+    sf->memory[0xCE] = 0xEF;
+    sf->memory[0xCF] = 0xBE;
+    sf->memory[0xBEEF] = 0x6E;
     process_line(sf);
+    if (sf->accumulator != 0x90 || check_flags(sf->status, 1, 1, 2, 2, 2, 0, 0)) {
+        return -1;
+    }
+
+    sf->pc = ROM_START;
+    sf->accumulator = 0xFE;
+    sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_ZPG << 2);
+    sf->memory[ROM_START + 1] = 0x01;
+    sf->memory[0x01] = 0x81;
+    process_line(sf);
+    if (sf->accumulator != 0x7F || check_flags(sf->status, 0, 1, 2, 2, 2, 0, 1)) {
+        return -1;
+    }
+
+    sf->pc = ROM_START;
+    sf->accumulator = 0x21;
+    sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_IMM << 2);
+    sf->memory[ROM_START + 1] = 0x42;
+    process_line(sf);
+    if (sf->accumulator != 0x64 || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 0)) {
+        return -1;
+    }
     
-    if ((sf->accumulator != (0x22 + 0x6E)) || check_flags(sf->status, 1, 0, 2, 2, 2, 0, 0)) {
+    sf->pc = ROM_START;
+    sf->accumulator = 0xFF;
+    sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_ABS << 2);
+    sf->memory[ROM_START + 1] = 0x2B;
+    sf->memory[ROM_START + 2] = 0xEE;
+    sf->memory[0xEE2B] = 0x01;
+    process_line(sf);
+    if (sf->accumulator != 0x00 || check_flags(sf->status, 0, 0, 2, 2, 2, 1, 1)) {
         return -1;
     }
 
-    // zero page absolute addressing (just overflow should be set)
     sf->pc = ROM_START;
-    sf->status = (1 << CARRY_INDEX);
-    zpg_load(sf, OP_ADC, 0x70, 0x96);
+    sf->y_index = 0x08;
+    sf->accumulator = 0xF3;
+    sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_IND_Y << 2);
+    sf->memory[ROM_START + 1] = 0xFF;
+    sf->memory[0xFF] = 0x25;
+    sf->memory[0x100] = 0x1D;
+    sf->memory[0x1D2D] = 0x09;
     process_line(sf);
-    if ((sf->accumulator != ((0x70 + 0x96) & 0xFF)) || check_flags(sf->status, 0, 1, 2, 2, 2, 0, 0)) {
+    if (sf->accumulator != 0xFD || check_flags(sf->status, 1, 0, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
-    //immediate addressing (carry should be set)
     sf->pc = ROM_START;
-    sf->status = 0x00;
-    imm_load(sf, OP_ADC, 0xC9, 0x66);
+    sf->x_index = 0xF4;
+    sf->accumulator = 0x00;
+    sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_ZPG_X << 2);
+    sf->memory[ROM_START + 1] = 0x02;
+    sf->memory[0xF6] = 0x67;
     process_line(sf);
-    if ((sf->accumulator != ((0xC9 + 0x66) & 0xFF)) || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 1)) {
+    if (sf->accumulator != 0x67 || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
-    // absolute addressing
     sf->pc = ROM_START;
-    sf->status = 0x00;
-    abs_load(sf, OP_ADC, 0x12, 0x6E);
+    sf->y_index = 0xE4;
+    sf->accumulator = 0xF2;
+    sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_ABS_Y << 2);
+    sf->memory[ROM_START + 1] = 0x3A;
+    sf->memory[ROM_START + 2] = 0x33;
+    sf->memory[0x333A + 0xE4] = 0x34;
     process_line(sf);
-    if ((sf->accumulator != (0x12 + 0x6E)) || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 0)) {
+    if (sf->accumulator != 0x26 || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
-    // post-indexed indirect addressing
     sf->pc = ROM_START;
-    sf->status = 0x00;
-    ind_y_load(sf, OP_ADC, 0xF0, 0x10);
+    sf->x_index = 0xE4;
+    sf->accumulator = 0xF2;
+    sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_ABS_X << 2);
+    sf->memory[ROM_START + 1] = 0x3A;
+    sf->memory[ROM_START + 2] = 0x33;
+    sf->memory[0x333A + 0xE4] = 0x34;
     process_line(sf);
-    if ((sf->accumulator != 0x00) || check_flags(sf->status, 0, 1, 2, 2, 2, 1, 1)) {
-        return -1;
-    }
-
-    // zero-page x-indexed addressing
-    sf->pc = ROM_START;
-    sf->status = 0x00;
-    zpg_x_load(sf, OP_ADC, 0x12, 0x6E);
-    process_line(sf);
-    if ((sf->accumulator != (0x12 + 0x6E)) || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 0)) {
-        return -1;
-    }
-
-    // absolute y-indexed addressing
-    sf->pc = ROM_START;
-    sf->status = 0x00;
-    abs_y_load(sf, OP_ADC, 0x12, 0x6E);
-    process_line(sf);
-    if ((sf->accumulator != (0x12 + 0x6E)) || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 0)) {
-        return -1;
-    }
-
-    // absolute x-indexed addressing
-    sf->pc = ROM_START;
-    sf->status = 0x00;
-    abs_x_load(sf, OP_ADC, 0x00, 0x00);
-    process_line(sf);
-    if ((sf->accumulator != 0x00) || check_flags(sf->status, 0, 0, 2, 2, 2, 1, 0)) {
+    if (sf->accumulator != 0x27 || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -1074,7 +1168,7 @@ static int LDY_TEST(sf_t *sf) {
     sf->x_index = 0x12;
     sf->memory[ROM_START] = OP_LDY | (ADDR_MODE_ZPG_X << 2);
     sf->memory[ROM_START + 1] = 0xF8;
-    sf->memory[0x12 + 0xF8] = 0x46;
+    sf->memory[(0x12 + 0xF8) % 0xFF] = 0x46;
     process_line(sf);
     if (sf->y_index != 0x46 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
@@ -1149,7 +1243,7 @@ static int LDA_TEST(sf_t *sf) {
     sf->x_index = 0x12;
     sf->memory[ROM_START] = OP_LDA | (ADDR_MODE_ZPG_X << 2);
     sf->memory[ROM_START + 1] = 0xF8;
-    sf->memory[0x12 + 0xF8] = 0x46;
+    sf->memory[(0x12 + 0xF8) % 0xFF] = 0x46;
     process_line(sf);
     if (sf->accumulator != 0x46 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
@@ -1211,7 +1305,7 @@ static int LDX_TEST(sf_t *sf) {
     sf->y_index = 0x12;
     sf->memory[ROM_START] = OP_LDX | (ADDR_MODE_ZPG_Y << 2);
     sf->memory[ROM_START + 1] = 0xF8;
-    sf->memory[0x12 + 0xF8] = 0x46;
+    sf->memory[(0x12 + 0xF8) % 0xFF] = 0x46;
     process_line(sf);
     if (sf->x_index != 0x46 || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
@@ -1379,9 +1473,9 @@ static int DEC_TEST(sf_t *sf) {
     sf->x_index = 0x90;
     sf->memory[ROM_START] = OP_DEC | (ADDR_MODE_ZPG_X << 2);
     sf->memory[ROM_START + 1] = 0xC6;
-    sf->memory[0xC6 + 0x90] = 0xFF;
+    sf->memory[(0xC6 + 0x90) % 0xFF] = 0xFF;
     process_line(sf);
-    if (sf->memory[0xC6 + 0x90] != 0xFE || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
+    if (sf->memory[(0xC6 + 0x90) % 0xFF] != 0xFE || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
 
@@ -1616,7 +1710,7 @@ int run_tests(sf_t *sf) {
     assert(run_test(sf, ROL_TEST, "ROL_TEST") == 0);
     assert(run_test(sf, EOR_TEST, "EOR_TEST") == 0);
     assert(run_test(sf, LSR_TEST, "LSR_TEST") == 0);
-    // assert(run_test(sf, ADC_TEST, "ADC_TEST") == 0); FAILING, NEED TO ZERO OUT FLAGS BETWEEN TESTS
+    assert(run_test(sf, ADC_TEST, "ADC_TEST") == 0);
     assert(run_test(sf, ROR_TEST, "ROR_TEST") == 0);
     assert(run_test(sf, STY_TEST, "STY_TEST") == 0);
     assert(run_test(sf, STA_TEST, "STA_TEST") == 0);

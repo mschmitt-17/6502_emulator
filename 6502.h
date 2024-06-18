@@ -5,9 +5,27 @@
 
 #define MEMORY_SIZE     (65536)
 #define IRQ_ADDRESS     (0xFFFE)
+
+/*
+ * opcodes are 8 bits long and have the general form AAABBBCC
+ * AAA and CC define the opcode
+ * BBB defines the addressing mode
+ */
 #define AAA_BITMASK     (0xE0)
 #define BBB_BITMASK     (0x1C)
 #define CC_BITMASK      (0x03)
+
+/*  STATUS (flags) REGISTER BITMAPPING
+ *  7 6 5 4 3 2 1 0
+ *  N V   B D I Z C
+ *      C (Carry Flag): holds carry out of MSB in any arithmetic operation
+ *      Z (Zero Flag): set to 1 whenever arithmetic/logical operation has 0 as result
+ *      I (Interrupt Flag): cleared = interrupts enabled
+ *      D (Decimal Flag): when set, arithmetic is binary-coded decimal (BCD)
+ *      B (BRK Flag): set when software interrupt is executed
+ *      V (Overflow Flag): when an arithmetic operation produces a result too large for a byte
+ *      N (Sign Flag): set if the result of an operation is negative
+ */
 #define CARRY_INDEX         (0)
 #define ZERO_INDEX          (1)
 #define INTERRUPT_INDEX     (2)
@@ -31,31 +49,12 @@
 #define RAM_START           (0xC000)
 
 /* OPCODES */
+
+/* SPECIAL CASE OPCODES (one addressing mode) */
 #define OP_BRK      (0x00) // forced interrupt
-#define OP_ORA      (0x01) // or memory (determined by addressing mode) with accumulator, result stored in accumulator
-#define OP_ASL      (0x02) // arithmetic shift left one bit
-#define OP_BIT      (0x20) // test bits in memory with accumulator
-#define OP_AND      (0x21) // and memory with accumulator
-#define OP_ROL      (0x22) // rotate one bit left
 #define OP_PHP      (0x08) // push processor status on stack
-#define OP_EOR      (0x41) // xor memory with accumulator
-#define OP_LSR      (0x42) // shift right one bit
-#define OP_ADC      (0x61) // add memory to accumulator with carry
-#define OP_ROR      (0x62) // rotate one bit right
-#define OP_STY      (0x80) // store index Y in memory
 #define OP_BPL      (0x10) // branch on N = 0
-#define OP_STA      (0x81) // store accumulator in memory
-#define OP_STX      (0x82) // store index X in memory
-#define OP_LDY      (0xA0) // load index Y with memory
-#define OP_LDA      (0xA1) // load accumulator with memory
-#define OP_LDX      (0xA2) // load index X with memory
 #define OP_CLC      (0x18) // clear carry flag
-#define OP_CPY      (0xC0) // compare memory and index Y
-#define OP_CMP      (0xC1) // compare memory and accumulator
-#define OP_DEC      (0xC2) // decrement memory by one
-#define OP_CPX      (0xE0) // compare memory and index X
-#define OP_SBC      (0xE1) // subtract memory from accumulator with borrow
-#define OP_INC      (0xE2) // increment memory by one
 #define OP_JSR      (0x20) // jump to subroutine after pushing return address to stack
 #define OP_PLP      (0x28) // pull processor status from stack
 #define OP_BMI      (0x30) // branch on N = 1
@@ -89,32 +88,57 @@
 #define OP_BEQ      (0xF0) // branch on zero flag set
 #define OP_SED      (0xF8) // set decimal mode
 
+/* NORMAL OPCODES (multiple addressing modes) */
+#define OP_ORA      (0x01) // or memory (determined by addressing mode) with accumulator, result stored in accumulator
+#define OP_ASL      (0x02) // arithmetic shift left one bit
+#define OP_BIT      (0x20) // test bits in memory with accumulator
+#define OP_AND      (0x21) // and memory with accumulator
+#define OP_ROL      (0x22) // rotate one bit left
+#define OP_EOR      (0x41) // xor memory with accumulator
+#define OP_LSR      (0x42) // shift right one bit
+#define OP_ADC      (0x61) // add memory to accumulator with carry
+#define OP_ROR      (0x62) // rotate one bit right
+#define OP_STY      (0x80) // store index Y in memory
+#define OP_STA      (0x81) // store accumulator in memory
+#define OP_STX      (0x82) // store index X in memory
+#define OP_LDY      (0xA0) // load index Y with memory
+#define OP_LDA      (0xA1) // load accumulator with memory
+#define OP_LDX      (0xA2) // load index X with memory
+#define OP_CPY      (0xC0) // compare memory and index Y
+#define OP_CMP      (0xC1) // compare memory and accumulator
+#define OP_DEC      (0xC2) // decrement memory by one
+#define OP_CPX      (0xE0) // compare memory and index X
+#define OP_SBC      (0xE1) // subtract memory from accumulator with borrow
+#define OP_INC      (0xE2) // increment memory by one
+
+/* ADDRESSING MODES (obtained using BBB_BITMASK and right shifting) */
 #define ADDR_MODE_IND_X     (0x00)
 #define ADDR_MODE_ZPG       (0x01)
 #define ADDR_MODE_IMM       (0x02)
+#define ADDR_MODE_ACCUM     (0x02)
 #define ADDR_MODE_ABS       (0x03)
 #define ADDR_MODE_IND_Y     (0x04)
 #define ADDR_MODE_ZPG_X     (0x05)
+#define ADDR_MODE_ZPG_Y     (0x05) // opcodes that store or load x_index use this mode
 #define ADDR_MODE_ABS_Y     (0x06)
 #define ADDR_MODE_ABS_X     (0x07)
-#define ADDR_MODE_ACCUM     (0x02)
-#define ADDR_MODE_ZPG_Y     (0x05)
+
+/* MEMORY ACCESS MACROS */
+#define IND_X_MEM_ACCESS    (sf->memory[((sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) | (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF]))]) // add x_index without carry
+#define ZPG_MEM_ACCESS      (sf->memory[sf->memory[sf->pc + 1]])
+#define IMM_MEM_ACCESS      (sf->memory[sf->pc + 1])
+#define ABS_MEM_ACCESS      (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]])
+#define IND_Y_MEM_ACCESS    (sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index])
+#define ZPG_X_MEM_ACCESS    (sf->memory[(sf->memory[sf->pc + 1] + sf->x_index) % 0xFF]) // add x_index without carry
+#define ZPG_Y_MEM_ACCESS    (sf->memory[(sf->memory[sf->pc + 1] + sf->y_index) % 0xFF]) // add x_index without carry
+#define ABS_Y_MEM_ACCESS    (sf->memory[(((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index) % 0xFFFF]) // has carry, but can't have result outside address space
+#define ABS_X_MEM_ACCESS    (sf->memory[(((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index) % 0xFFFF])
 
 
 typedef struct sf {
     uint8_t accumulator;
     uint8_t x_index;
     uint8_t y_index;
-    /*  7 6 5 4 3 2 1 0
-     *  N V   B D I Z C
-     *      C (Carry Flag): holds carry out of MSB in any arithmetic operation
-     *      Z (Zero Flag): set to 1 whenever arithmetic/logical operation has 0 as result
-     *      I (Interrupt Flag): cleared = interrupts enabled
-     *      D (Decimal Flag): when set, arithmetic is binary-coded decimal (BCD)
-     *      B (BRK Flag): set when software interrupt is executed
-     *      V (Overflow Flag): when an arithmetic operation produces a result too large for a byte
-     *      N (Sign Flag): set if the result of an operation is negative
-     */
     uint8_t status;
     uint16_t esp;
     uint16_t pc;

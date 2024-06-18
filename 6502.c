@@ -12,11 +12,325 @@ void initialize_regs(sf_t *sf) {
     memset(sf->memory, 0, MEMORY_SIZE);
 }
 
-/*
- * opcodes are 8 bits long and have the general form AAABBBCC
- * AAA and CC define the opcode
- * BBB defines the addressing mode
- */
+static void check_negative_and_zero(sf_t *sf, uint8_t operand) {
+    if (operand & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if (operand == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void ORA_operation(sf_t *sf, uint8_t *operand) {
+    sf->accumulator |= *operand;
+    check_negative_and_zero(sf, sf->accumulator);
+}
+
+static void ASL_operation(sf_t *sf, uint8_t *operand) {
+    if ((*operand) & 0x80) {
+        sf->status |= (1 << CARRY_INDEX);
+    } else {
+        sf->status &= ~(1 << CARRY_INDEX);
+    }
+    *operand = (*operand) << 1;
+    check_negative_and_zero(sf, *operand);
+}
+
+static void BIT_operation(sf_t *sf, uint8_t *operand) {
+    if ((sf->accumulator & (*operand)) == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+    sf->status |= (sf->accumulator & (*operand)) & (1 << NEGATIVE_INDEX);
+    sf->status |= (sf->accumulator & (*operand)) & (1 << OVERFLOW_INDEX);
+}
+
+static void AND_operation(sf_t *sf, uint8_t *operand) {
+    sf->accumulator &= *operand;
+    check_negative_and_zero(sf, sf->accumulator);
+}
+
+static void ROL_operation(sf_t *sf, uint8_t *operand) {
+    uint16_t temp = (uint16_t)(*operand); 
+    temp = temp << 1;
+    
+    // check for shift in a 1
+    if (sf->status & (1 << CARRY_INDEX)) {
+        temp += 1;
+    }
+    // check for shift into carry
+    if (temp & 0x100) {
+        sf->status |= (1 << CARRY_INDEX);
+    } else {
+        sf->status &= ~(1 << CARRY_INDEX);
+    }
+    
+    *operand = (temp & 0xFF);
+    check_negative_and_zero(sf, *operand);
+}
+
+static void EOR_operation(sf_t *sf, uint8_t *operand) {
+    sf->accumulator ^= *operand;
+    check_negative_and_zero(sf, sf->accumulator);
+}
+
+static void LSR_operation(sf_t *sf, uint8_t *operand) {
+    if ((*operand) % 2) {
+        sf->status |= (1 << CARRY_INDEX);
+    } else {
+        sf->status &= ~(1 << CARRY_INDEX);
+    }
+    *operand = (*operand) >> 1;
+    check_negative_and_zero(sf, *operand);
+}
+
+static void ADC_operation(sf_t *sf, uint8_t *operand) {
+    uint16_t temp = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX)) + *operand;
+    if (((temp & 0x80) && // positive + positive = negative
+         (!(sf->accumulator & 0x80)) &&
+         (!(((*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX))) & 0x80))) ||
+        ((!(temp & 0x80)) && // negative + negative = positive
+         (sf->accumulator & 0x80) &&
+         (((*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX))) & 0x80))) {
+        sf->status |= (1 << OVERFLOW_INDEX);
+    } else {
+        sf->status &= ~(1 << OVERFLOW_INDEX);
+    }
+    sf->accumulator = (temp & 0xFF);
+    
+    if (temp & 0x100) {
+        sf->status |= (1 << CARRY_INDEX);
+    } else {
+        sf->status &= ~(1 << CARRY_INDEX);
+    }
+    
+    check_negative_and_zero(sf, sf->accumulator);
+}
+
+static void ROR_operation(sf_t *sf, uint8_t *operand) {
+    uint8_t temp = (*operand) >> 1;
+    if (sf->status & (1 << CARRY_INDEX)) {
+        temp |= 0x80;
+    }
+    if ((*operand) % 2) {
+        sf->status |= (1 << CARRY_INDEX);
+    } else {
+        sf->status &= ~(1 << CARRY_INDEX);
+    }
+    *operand = temp;
+    
+    if ((*operand) & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if ((*operand) == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void STY_operation(sf_t *sf, uint8_t *operand) {
+    *operand = sf->y_index;
+}
+
+static void STA_operation(sf_t *sf, uint8_t *operand) {
+    *operand = sf->accumulator;
+}
+
+static void STX_operation(sf_t *sf, uint8_t *operand) {
+    *operand = sf->x_index;
+}
+
+static void LDY_operation(sf_t *sf, uint8_t *operand) {
+    sf->y_index = *operand;
+    
+    if (sf->y_index & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if (sf->y_index == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void LDA_operation(sf_t *sf, uint8_t *operand) {
+    sf->accumulator = *operand;
+    
+    if (sf->accumulator & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if (sf->accumulator == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void LDX_operation(sf_t *sf, uint8_t *operand) {
+    sf->x_index = *operand;
+    
+    if (sf->x_index & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if (sf->x_index == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void CPY_operation(sf_t *sf, uint8_t *operand) {
+    if (sf->y_index < *operand) {
+        sf->status |= (1 << CARRY_INDEX);
+    } else {
+        sf->status &= ~(1 << CARRY_INDEX);
+    }
+    uint8_t temp = sf->y_index - *operand;
+
+    if (temp & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if (temp == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void CMP_operation(sf_t *sf, uint8_t *operand) {
+    if (sf->accumulator < *operand) {
+        sf->status |= (1 << CARRY_INDEX);
+    } else {
+        sf->status &= ~(1 << CARRY_INDEX);
+    }
+    uint8_t temp = sf->accumulator - *operand;
+
+    if (temp & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if (temp == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void DEC_operation(sf_t *sf, uint8_t *operand) {
+    *operand -= 1;
+                            
+    if ((*operand) & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if ((*operand) == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void CPX_operation(sf_t *sf, uint8_t *operand) {
+    if (sf->x_index < *operand) {
+        sf->status |= (1 << CARRY_INDEX);
+    } else {
+        sf->status &= ~(1 << CARRY_INDEX);
+    }
+    uint8_t temp = sf->x_index - *operand;
+
+    if (temp & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if (temp == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void SBC_operation(sf_t *sf, uint8_t *operand) {
+    uint8_t temp = sf->accumulator - ((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
+    
+    // positive - negative overflow to negative
+    if (((temp & 0x80) && 
+            (!(sf->accumulator & 0x80)) && 
+            (((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) & 0x80)) ||
+            // negative - positive overflow to positive
+            (!(temp & 0x80)) &&
+            (sf->accumulator & 0x80) &&
+            (!(((((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) & 0x80))))
+            ) {
+        sf->status |= (1 << OVERFLOW_INDEX);
+    } else {
+        sf->status &= ~(1 << OVERFLOW_INDEX);
+    }
+
+    // check carry
+    if (sf->accumulator < ((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
+        sf->status &= ~(1 << CARRY_INDEX);
+    } else {
+        sf->status |= (1 << CARRY_INDEX);
+    }
+
+    sf->accumulator = temp;
+
+    if (sf->accumulator & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if (sf->accumulator == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
+
+static void INC_operation(sf_t *sf, uint8_t *operand) {
+    *operand += 1;
+
+    if ((*operand) & 0x80) {
+        sf->status |= (1 << NEGATIVE_INDEX);
+    } else {
+        sf->status &= ~(1 << NEGATIVE_INDEX);
+    }
+
+    if ((*operand) == 0x00) {
+        sf->status |= (1 << ZERO_INDEX);
+    } else {
+        sf->status &= ~(1 << ZERO_INDEX);
+    }
+}
 
 // since number of bytes needed will vary based on operation and addressing mode,
 // process data "line-by-line" instead of opcode-by-opcode
@@ -240,113 +554,63 @@ void process_line (sf_t *sf) {
                 case ((OP_ORA & AAA_BITMASK) >> 3) | (OP_ORA & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_IND_X:
-                            sf->accumulator = sf->accumulator |
-                                              sf->memory[((sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) |
-                                               (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF]))];
+                            ORA_operation(sf, &IND_X_MEM_ACCESS);                 
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            sf->accumulator = sf->accumulator | sf->memory[sf->memory[sf->pc + 1]];
+                            ORA_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_IMM:
-                            sf->accumulator = sf->accumulator | sf->memory[sf->pc + 1];
+                            ORA_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->accumulator = sf->accumulator | (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]]);
+                            ORA_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_IND_Y:
-                            sf->accumulator = sf->accumulator |
-                                              sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|
-                                               sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index];
+                            ORA_operation(sf, &IND_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            sf->accumulator = (sf->accumulator | sf->memory[sf->memory[sf->pc + 1] + sf->x_index]);
+                            ORA_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_Y:
-                            sf->accumulator = sf->accumulator | sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index];
+                            ORA_operation(sf, &ABS_Y_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ABS_X:
-                            sf->accumulator = sf->accumulator | sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index];
+                            ORA_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
-                        // adjust flags
-                        if (sf->accumulator < 0) {
-                            sf->status |= (1 << NEGATIVE_INDEX);
-                        } else if (sf->accumulator == 0) {
-                            sf->status |= (1 << ZERO_INDEX);
-                        }
                     }
+                    check_negative_and_zero(sf, sf->accumulator);
                     break;
-                // TODO: fix negatives
+
                 case ((OP_ASL & AAA_BITMASK) >> 3) | (OP_ASL & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            // set carry flag before performing operation to avoid converting type
-                            if (sf->memory[sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[sf->memory[sf->pc + 1]] = sf->memory[sf->memory[sf->pc + 1]] << 1;
-                            if (sf->memory[sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->memory[sf->memory[sf->pc + 1]] == 0) {
-                                sf->status != (1 << ZERO_INDEX);
-                            }
+                            ASL_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ACCUM:
-                            if (sf->accumulator & 0x80) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->accumulator = sf->accumulator << 1;
-                            if (sf->accumulator & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->accumulator == 0) {
-                                sf->status != (1 << ZERO_INDEX);
-                            }
+                            ASL_operation(sf, &sf->accumulator);
                             sf->pc += 1;
                             break;
                         case ADDR_MODE_ABS:
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[(sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]] = sf->memory[(sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]] << 1;
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->memory[(sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]] == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
+                            ASL_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            if (sf->memory[(uint16_t)sf->memory[sf->pc + 1] + sf->x_index] & 0x80) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[(uint16_t)sf->memory[sf->pc + 1] + sf->x_index] = sf->memory[(uint16_t)sf->memory[sf->pc + 1] + sf->x_index] << 1;
-                            if (sf->memory[(uint16_t)sf->memory[sf->pc + 1] + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->memory[(uint16_t)sf->memory[sf->pc + 1] + sf->x_index] == 0) {
-                                sf->status != (1 << ZERO_INDEX);
-                            }
+                            ASL_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_X:
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] & 0x80) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] = sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] << 1;
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
+                            ASL_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
@@ -357,19 +621,11 @@ void process_line (sf_t *sf) {
                 case ((OP_BIT & AAA_BITMASK) >> 3) | (OP_BIT & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            if ((sf->accumulator & sf->memory[sf->memory[sf->pc + 1]]) == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
-                            sf->status |= sf->memory[sf->memory[sf->pc + 1]] & (1 << NEGATIVE_INDEX);
-                            sf->status |= sf->memory[sf->memory[sf->pc + 1]] & (1 << OVERFLOW_INDEX);
+                            BIT_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            if (sf->accumulator & (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]]) == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
-                            sf->status |= sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] & (1 << NEGATIVE_INDEX);
-                            sf->status |= sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] & (1 << OVERFLOW_INDEX);
+                            BIT_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
@@ -380,159 +636,62 @@ void process_line (sf_t *sf) {
                 case ((OP_AND & AAA_BITMASK) >> 3) | (OP_AND & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_IND_X:
-                            sf->accumulator = sf->accumulator &
-                                              sf->memory[((sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) |
-                                               (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF]))];
+                            AND_operation(sf, &IND_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            sf->accumulator = sf->accumulator & sf->memory[sf->memory[sf->pc + 1]];
+                            AND_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_IMM:
-                            sf->accumulator = sf->accumulator & sf->memory[sf->pc + 1];
+                            AND_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->accumulator = sf->accumulator & (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]]);
+                            AND_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_IND_Y:
-                            sf->accumulator = sf->accumulator &
-                                              sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|
-                                               sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index];
+                            AND_operation(sf, &IND_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            sf->accumulator = (sf->accumulator & sf->memory[sf->memory[sf->pc + 1] + sf->x_index]);
+                            AND_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_Y:
-                            sf->accumulator = sf->accumulator & sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index];
+                            AND_operation(sf, &ABS_Y_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ABS_X:
-                            sf->accumulator = sf->accumulator & sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index];
+                            AND_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
-                        // adjust flags
-                    }
-                    if (sf->accumulator & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else if (sf->accumulator == 0) {
-                        sf->status |= (1 << ZERO_INDEX);
                     }
                     break;
 
                 case ((OP_ROL & AAA_BITMASK) >> 3) | (OP_ROL & CC_BITMASK):
-                    uint16_t temp_ROL;
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            temp_ROL = (uint16_t)sf->memory[sf->memory[sf->pc + 1]]; 
-                            temp_ROL = temp_ROL << 1;
-                            // check for shift in a 1
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROL += 1;
-                            }
-                            // check for shift into carry
-                            if (temp_ROL & 0x100) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            // check for negative/zero
-                            if (temp_ROL & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if ((temp_ROL & 0xFF) == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
-                            sf->memory[sf->memory[sf->pc + 1]] = (temp_ROL & 0xFF);
+                            ROL_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ACCUM:
-                            temp_ROL = (uint16_t)sf->accumulator; 
-                            temp_ROL = temp_ROL << 1;
-                            // check for shift in a 1
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROL += 1;
-                            }
-                            // check for shift into carry
-                            if (temp_ROL & 0x100) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            // check for negative/zero
-                            if (temp_ROL & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if ((temp_ROL & 0xFF) == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
-                            sf->accumulator = (temp_ROL & 0xFF);
+                            ROL_operation(sf, &sf->accumulator);
                             sf->pc += 1;
                             break;
                         case ADDR_MODE_ABS:
-                            temp_ROL = (uint16_t)sf->memory[(sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]];
-                            temp_ROL = temp_ROL << 1;
-                            // check for shift in a 1
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROL += 1;
-                            }
-                            // check for shift into carry
-                            if (temp_ROL & 0x100) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            // check for negative/zero
-                            if (temp_ROL & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if ((temp_ROL & 0xFF) == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[(sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]] = (temp_ROL & 0xFF);
+                            ROL_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            temp_ROL = (uint16_t)sf->memory[sf->memory[sf->pc + 1] + sf->x_index]; 
-                            temp_ROL = temp_ROL << 1;
-                            // check for shift in a 1
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROL += 1;
-                            }
-                            // check for shift into carry
-                            if (temp_ROL & 0x100) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            // check for negative/zero
-                            if (temp_ROL & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if ((temp_ROL & 0xFF) == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
-                            sf->memory[sf->memory[sf->pc + 1] + sf->x_index] = (temp_ROL & 0xFF);
+                            ROL_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_X:
-                            temp_ROL = (uint16_t)sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index];
-                            temp_ROL = temp_ROL << 1;
-                            // check for shift in a 1
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROL += 1;
-                            }
-                            // check for shift into carry
-                            if (temp_ROL & 0x100) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            // check for negative/zero
-                            if (temp_ROL & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if ((temp_ROL & 0xFF) == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] = (temp_ROL & 0xFF);
+                            ROL_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
@@ -543,186 +702,105 @@ void process_line (sf_t *sf) {
                 case ((OP_EOR & AAA_BITMASK) >> 3) | (OP_EOR & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_IND_X:
-                            sf->accumulator ^= sf->memory[((sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) |
-                                               (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF]))];
+                            EOR_operation(sf, &IND_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            sf->accumulator ^= sf->memory[sf->memory[sf->pc + 1]];
+                            EOR_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_IMM:
-                            sf->accumulator ^= sf->memory[sf->pc + 1];
+                            EOR_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->accumulator ^= sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]];
+                            EOR_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_IND_Y:
-                            sf->accumulator ^= sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|
-                                               sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index];
+                            EOR_operation(sf, &IND_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            sf->accumulator ^= sf->memory[sf->memory[sf->pc + 1] + sf->x_index];
+                            EOR_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_Y:
-                            sf->accumulator ^= sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index];
+                            EOR_operation(sf, &ABS_Y_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ABS_X:
-                            sf->accumulator ^= sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index];
+                            EOR_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
-                    }
-                    
-                    // set flags
-                    if (sf->accumulator & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else if (sf->accumulator == 0) {
-                        sf->status |= (1 << ZERO_INDEX);
                     }
                     break;
 
                 case ((OP_LSR & AAA_BITMASK) >> 3) | (OP_LSR & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            if (sf->memory[sf->memory[sf->pc + 1]] % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[sf->memory[sf->pc + 1]] = sf->memory[sf->memory[sf->pc + 1]] >> 1;
-                            if (sf->memory[sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->memory[sf->memory[sf->pc + 1]] == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
+                            LSR_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ACCUM:
-                            if (sf->accumulator % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->accumulator = sf->accumulator >> 1;
-                            if (sf->accumulator & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->accumulator == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
+                            LSR_operation(sf, &sf->accumulator);
                             sf->pc += 1;
                             break;
                         case ADDR_MODE_ABS:
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] = sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] >> 1;
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
+                            LSR_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[sf->memory[sf->pc + 1] + sf->x_index] = sf->memory[sf->memory[sf->pc + 1] + sf->x_index] >> 1;
-                            if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
+                            LSR_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_X:
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-                            sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] = sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] >> 1;
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else if (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] == 0) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            }
+                            LSR_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
                     }
-                    // logical shift so 0 will always be MSB
-                    sf->status &= ~(1 << NEGATIVE_INDEX);
                     break;
 
                 case ((OP_ADC & AAA_BITMASK) >> 3) | (OP_ADC & CC_BITMASK):
-                    uint16_t temp_ADC;
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_IND_X:
-                            temp_ADC = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) << 8) +
-                                    sf->memory[(sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) |
-                                    (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF])];
-                            sf->accumulator = (temp_ADC & 0xFF);
+                            ADC_operation(sf, &IND_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            temp_ADC = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) << 8) +
-                                    sf->memory[sf->memory[sf->pc + 1]];
-                            sf->accumulator = (temp_ADC & 0xFF);
+                            ADC_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_IMM:
-                            temp_ADC = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) << 8) +
-                                    sf->memory[sf->pc + 1];
-                            sf->accumulator = (temp_ADC & 0xFF);
+                            ADC_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            temp_ADC = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) << 8) +
-                                    sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]];
-                            sf->accumulator = (temp_ADC & 0xFF);
+                            ADC_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_IND_Y:
-                            temp_ADC = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) << 8) +
-                                    sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|
-                                               sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index];
-                            sf->accumulator = (temp_ADC & 0xFF);
+                            ADC_operation(sf, &IND_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            temp_ADC = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) << 8) +
-                                    sf->memory[sf->memory[sf->pc + 1] + sf->x_index];
-                            sf->accumulator = (temp_ADC & 0xFF);
+                            ADC_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_Y:
-                            temp_ADC = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) << 8) +
-                                    sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index];
-                            sf->accumulator = (temp_ADC & 0xFF);
+                            ADC_operation(sf, &ABS_Y_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ABS_X:
-                            temp_ADC = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) << 8) +
-                                    sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index];
-                            sf->accumulator = (temp_ADC & 0xFF);
+                            ADC_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
-                    }
-                    if (temp_ADC & 0x100) {
-                        sf->status |= (1 << CARRY_INDEX);
-                    }
-                    if (temp_ADC & 0xF00) {
-                        sf->status |= (1 << OVERFLOW_INDEX);
-                    }
-                    if (sf->accumulator & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else if (sf->accumulator == 0) {
-                        sf->status |= (1 << ZERO_INDEX);
                     }
                     break;
 
@@ -730,153 +808,42 @@ void process_line (sf_t *sf) {
                     uint8_t temp_ROR;
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            temp_ROR = sf->memory[sf->memory[sf->pc + 1]] >> 1;
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROR |= 0x80;
-                            }
-                            if (sf->memory[sf->memory[sf->pc + 1]] % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            sf->memory[sf->memory[sf->pc + 1]] = temp_ROR;
-                            
-                            if (sf->memory[sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[sf->memory[sf->pc + 1]] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-                            
+                            ROR_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ACCUM:
-                            temp_ROR = sf->accumulator >> 1; 
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROR |= 0x80;
-                            }
-                            if (sf->accumulator % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            sf->accumulator = temp_ROR;
-
-                            if (sf->accumulator & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->accumulator == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-
+                            ROR_operation(sf, &sf->accumulator);
                             sf->pc += 1;
                             break;
                         case ADDR_MODE_ABS:
-                            temp_ROR = sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] >> 1;
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROR |= 0x80;
-                            }
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] = temp_ROR;
-                            
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-
+                            ROR_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            temp_ROR = sf->memory[sf->memory[sf->pc + 1] + sf->x_index] >> 1;
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROR |= 0x80;
-                            }
-                            if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            sf->memory[sf->memory[sf->pc + 1] + sf->x_index] = temp_ROR;
-                            
-                            if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-                            
+                            ROR_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_X:
-                            temp_ROR = sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] >> 1;
-                            if (sf->status & (1 << CARRY_INDEX)) {
-                                temp_ROR |= 0x80;
-                            }
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] % 2) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] = temp_ROR;
-                            
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8) | sf->memory[sf->pc + 1]) + sf->x_index] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-                            
+                            ROR_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
                     }
-
                     break;
 
                 case ((OP_STY & AAA_BITMASK) >> 3)|(OP_STY & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            sf->memory[sf->memory[sf->pc + 1]] = sf->y_index;
+                            STY_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] = sf->y_index;
+                            STY_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            sf->memory[sf->memory[sf->pc + 1] + sf->x_index] = sf->y_index;
+                            STY_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         default:
@@ -887,32 +854,31 @@ void process_line (sf_t *sf) {
                 case ((OP_STA & AAA_BITMASK) >> 3)|(OP_STA & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_IND_X:
-                            sf->memory[(sf->memory[(sf->memory[sf->pc + 1] + sf->x_index + 1) % 0xFF] << 8) |
-                                        sf->memory[(sf->memory[sf->pc + 1] + sf->x_index) % 0xFF]] = sf->accumulator;
+                            STA_operation(sf, &IND_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            sf->memory[sf->memory[sf->pc + 1]] = sf->accumulator;
+                            STA_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2; 
                             break;
                         case ADDR_MODE_ABS:
-                            sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] = sf->accumulator;
+                            STA_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_IND_Y:
-                            sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index] = sf->accumulator;
+                            STA_operation(sf, &IND_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            sf->memory[sf->memory[sf->pc + 1] + sf->x_index] = sf->accumulator;
+                            STA_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2; 
                             break;
                         case ADDR_MODE_ABS_Y:
-                            sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index] = sf->accumulator;
+                            STA_operation(sf, &ABS_Y_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ABS_X:
-                            sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] = sf->accumulator;
+                            STA_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
@@ -923,15 +889,15 @@ void process_line (sf_t *sf) {
                 case ((OP_STX & AAA_BITMASK) >> 3)|(OP_STX & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            sf->memory[sf->memory[sf->pc + 1]] = sf->x_index;
+                            STX_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] = sf->x_index;
+                            STX_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_Y:
-                            sf->memory[sf->memory[sf->pc + 1] + sf->y_index] = sf->x_index;
+                            STX_operation(sf, &ZPG_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         default:
@@ -942,130 +908,93 @@ void process_line (sf_t *sf) {
                 case ((OP_LDY & AAA_BITMASK) >> 3)|(OP_LDY & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            sf->y_index = sf->memory[sf->memory[sf->pc + 1]];
+                            LDY_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case 0x00: // special case, this is immediate
-                            sf->y_index = sf->memory[sf->pc + 1];
+                            LDY_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->y_index = sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]];
+                            LDY_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            sf->y_index = sf->memory[sf->memory[sf->pc + 1] + sf->x_index];
+                            LDY_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_X:
-                            sf->y_index = sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index];
+                            LDY_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
-                    }
-                    if (sf->y_index & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else {
-                        sf->status &= ~(1 << NEGATIVE_INDEX);
-                    }
-
-                    if (sf->y_index == 0x00) {
-                        sf->status |= (1 << ZERO_INDEX);
-                    } else {
-                        sf->status &= ~(1 << ZERO_INDEX);
                     }
                     break;
 
                 case ((OP_LDA & AAA_BITMASK) >> 3)|(OP_LDA & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_IND_X:
-                            sf->accumulator = sf->memory[(sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) |
-                                                (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF])];
+                            LDA_operation(sf, &IND_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            sf->accumulator = sf->memory[sf->memory[sf->pc + 1]];
+                            LDA_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_IMM:
-                            sf->accumulator = sf->memory[sf->pc + 1];
+                            LDA_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->accumulator = sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]];
+                            LDA_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_IND_Y:
-                            sf->accumulator =  sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|
-                                               sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index];
+                            LDA_operation(sf, &IND_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            sf->accumulator = sf->memory[sf->memory[sf->pc + 1] + sf->x_index];
+                            LDA_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_Y:
-                            sf->accumulator = sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index];
+                            LDA_operation(sf, &ABS_Y_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ABS_X:
-                            sf->accumulator = sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index];
+                            LDA_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
                     }
-                    if (sf->accumulator & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else {
-                        sf->status &= ~(1 << NEGATIVE_INDEX);
-                    }
-
-                    if (sf->accumulator == 0x00) {
-                        sf->status |= (1 << ZERO_INDEX);
-                    } else {
-                        sf->status &= ~(1 << ZERO_INDEX);
-                    }
-
                     break;
 
                 case ((OP_LDX & AAA_BITMASK) >> 3)|(OP_LDX & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            sf->x_index = sf->memory[sf->memory[sf->pc + 1]];
+                            LDX_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case 0x00: // special case, this is immediate
-                            sf->x_index = sf->memory[sf->pc + 1];
+                            LDX_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->x_index = sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]];
+                            LDX_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_Y:
-                            sf->x_index = sf->memory[sf->memory[sf->pc + 1] + sf->y_index];
+                            LDX_operation(sf, &ZPG_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_X: // special case, we use y_index for indexing here
-                            sf->x_index = sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index];
+                            LDX_operation(sf, &ABS_Y_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
-                    }
-                    
-                    if (sf->x_index & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else {
-                        sf->status &= ~(1 << NEGATIVE_INDEX);
-                    }
-
-                    if (sf->x_index == 0x00) {
-                        sf->status |= (1 << ZERO_INDEX);
-                    } else {
-                        sf->status &= ~(1 << ZERO_INDEX);
                     }
                     break;
 
@@ -1073,214 +1002,78 @@ void process_line (sf_t *sf) {
                     uint8_t temp_CPY;
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case 0x00: // special case: immediate
-                            if (sf->y_index < sf->memory[sf->pc + 1]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CPY = sf->y_index - sf->memory[sf->pc + 1];
+                            CPY_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            if (sf->y_index < sf->memory[sf->memory[sf->pc + 1]]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CPY = sf->y_index - sf->memory[sf->memory[sf->pc + 1]];
+                            CPY_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            if (sf->y_index < sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CPY = sf->y_index - sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]];
+                            CPY_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
                     }
-                    
-                    if (temp_CPY & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else {
-                        sf->status &= ~(1 << NEGATIVE_INDEX);
-                    }
-
-                    if (temp_CPY == 0x00) {
-                        sf->status |= (1 << ZERO_INDEX);
-                    } else {
-                        sf->status &= ~(1 << ZERO_INDEX);
-                    }
-
                     break;
 
                 case ((OP_CMP & AAA_BITMASK) >> 3)|(OP_CMP & CC_BITMASK):
                     uint8_t temp_CMP;
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_IND_X:
-                            if (sf->accumulator < sf->memory[(sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) |
-                                                (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF])]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CMP = sf->accumulator - sf->memory[(sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) |
-                                                (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF])];
+                            CMP_operation(sf, &IND_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            if (sf->accumulator < sf->memory[sf->memory[sf->pc + 1]]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CMP = sf->accumulator - sf->memory[sf->memory[sf->pc + 1]];
+                            CMP_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_IMM:
-                            if (sf->accumulator < sf->memory[sf->pc + 1]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CMP = sf->accumulator - sf->memory[sf->pc + 1];
+                            CMP_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            if (sf->accumulator < sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CMP = sf->accumulator - sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]];
+                            CMP_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_IND_Y:
-                            if (sf->accumulator < sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|
-                                               sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CMP = sf->accumulator - sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|
-                                               sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index];
+                            CMP_operation(sf, &IND_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            if (sf->accumulator < sf->memory[sf->memory[sf->pc + 1] + sf->x_index]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CMP = sf->accumulator - sf->memory[sf->memory[sf->pc + 1] + sf->x_index];
+                            CMP_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_Y:
-                            if (sf->accumulator < sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            sf->accumulator = sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index];
+                            CMP_operation(sf, &ABS_Y_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ABS_X:
-                            if (sf->accumulator < sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            sf->accumulator = sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index];
+                            CMP_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
-                    }
-
-                    if (temp_CMP & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else {
-                        sf->status &= ~(1 << NEGATIVE_INDEX);
-                    }
-
-                    if (temp_CMP == 0x00) {
-                        sf->status |= (1 << ZERO_INDEX);
-                    } else {
-                        sf->status &= ~(1 << ZERO_INDEX);
                     }
                     break;
 
                 case ((OP_DEC & AAA_BITMASK) >> 3)|(OP_DEC & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            sf->memory[sf->memory[sf->pc + 1]] -= 1;
-                            
-                            if (sf->memory[sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[sf->memory[sf->pc + 1]] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-                            
+                            DEC_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] -= 1;
-
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-
+                            DEC_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            sf->memory[sf->memory[sf->pc + 1] + sf->x_index] -= 1;
-
-                            if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-
+                            DEC_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_X:
-                            sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] -= 1;
-
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-
+                            DEC_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
@@ -1291,46 +1084,19 @@ void process_line (sf_t *sf) {
                 case ((OP_CPX & AAA_BITMASK) >> 3)|(OP_CPX & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case 0x00: // special case: immediate
-                            if (sf->x_index < sf->memory[sf->pc + 1]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CPY = sf->x_index - sf->memory[sf->pc + 1];
+                            CPX_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            if (sf->x_index < sf->memory[sf->memory[sf->pc + 1]]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CPY = sf->x_index - sf->memory[sf->memory[sf->pc + 1]];
+                            CPX_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            if (sf->x_index < sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]]) {
-                                sf->status |= (1 << CARRY_INDEX);
-                            } else {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            }
-                            temp_CPY = sf->x_index - sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]];
+                            CPX_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
-                    }
-                    
-                    if (temp_CPY & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else {
-                        sf->status &= ~(1 << NEGATIVE_INDEX);
-                    }
-
-                    if (temp_CPY == 0x00) {
-                        sf->status |= (1 << ZERO_INDEX);
-                    } else {
-                        sf->status &= ~(1 << ZERO_INDEX);
                     }
                     break;
 
@@ -1338,306 +1104,58 @@ void process_line (sf_t *sf) {
                     uint8_t temp_SBC;
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_IND_X:
-                            temp_SBC = sf->accumulator - (sf->memory[(sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) | (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF])] 
-                                                         + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
-                            
-                            
-                            // positive - negative overflow to negative
-                            if (((temp_SBC & 0x80) && 
-                                 (!(sf->accumulator & 0x80)) && 
-                                 ((sf->memory[(((sf->memory[sf->pc + 1] + sf->x_index + 1) & 0xFF) << 8)|sf->memory[(sf->memory[sf->pc + 1] + sf->x_index) % 0xFF]] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) & 0x80)) ||
-                                 // negative - positive overflow to positive
-                                 (!(temp_SBC & 0x80)) &&
-                                 (sf->accumulator & 0x80) &&
-                                 (!((((sf->memory[(((sf->memory[sf->pc + 1] + sf->x_index + 1) & 0xFF) << 8)|sf->memory[(sf->memory[sf->pc + 1] + sf->x_index) % 0xFF]] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) & 0x80))))
-                                 ) {
-                                sf->status |= (1 << OVERFLOW_INDEX);
-                            } else {
-                                sf->status &= ~(1 << OVERFLOW_INDEX);
-                            }
-
-                            // check carry
-                            if (sf->accumulator < (sf->memory[(((sf->memory[sf->pc + 1] + sf->x_index + 1) & 0xFF) << 8)|sf->memory[(sf->memory[sf->pc + 1] + sf->x_index) % 0xFF]]
-                                                  + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            } else {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-
-                            sf->accumulator = temp_SBC;
+                            SBC_operation(sf, &IND_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG:
-                            temp_SBC = sf->accumulator - (sf->memory[sf->memory[sf->pc + 1]] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
-                            
-                            // positive - negative overflow to negative
-                            if (((temp_SBC & 0x80) && 
-                                 (!(sf->accumulator & 0x80)) && 
-                                 ((sf->memory[sf->memory[sf->pc + 1]] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)) ||
-                                 // negative - positive overflow to positive
-                                ((!(temp_SBC & 0x80)) &&
-                                 (sf->accumulator & 0x80) &&
-                                 (!((sf->memory[sf->memory[sf->pc + 1]] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)))
-                                 ) {
-                                sf->status |= (1 << OVERFLOW_INDEX);
-                            } else {
-                                sf->status &= ~(1 << OVERFLOW_INDEX);
-                            }
-
-                            // check carry
-                            if (sf->accumulator < (sf->memory[sf->memory[sf->pc + 1]] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            } else {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-
-                            sf->accumulator = temp_SBC;
+                            SBC_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_IMM:
-                            temp_SBC = sf->accumulator - (sf->memory[sf->pc + 1] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
-                            
-                            // positive - negative overflow to negative
-                            if (((temp_SBC & 0x80) && 
-                                 (!(sf->accumulator & 0x80)) && 
-                                 ((sf->memory[sf->pc + 1] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)) ||
-                                 // negative - positive overflow to positive
-                                ((!(temp_SBC & 0x80)) &&
-                                 (sf->accumulator & 0x80) &&
-                                 (!((sf->memory[sf->pc + 1] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)))
-                                 ) {
-                                sf->status |= (1 << OVERFLOW_INDEX);
-                            } else {
-                                sf->status &= ~(1 << OVERFLOW_INDEX);
-                            }
-                            
-                            if (sf->accumulator < (sf->memory[sf->pc + 1] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            } else {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-
-                            sf->accumulator = temp_SBC;
+                            SBC_operation(sf, &IMM_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            temp_SBC = sf->accumulator - (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
-                            
-                            // positive - negative overflow to negative
-                            if (((temp_SBC & 0x80) && 
-                                 (!(sf->accumulator & 0x80)) && 
-                                 ((sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)) ||
-                                 // negative - positive overflow to positive
-                                ((!(temp_SBC & 0x80)) &&
-                                 (sf->accumulator & 0x80) &&
-                                 (!((sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)))
-                                 ) {
-                                sf->status |= (1 << OVERFLOW_INDEX);
-                            } else {
-                                sf->status &= ~(1 << OVERFLOW_INDEX);
-                            }
-
-                            if (sf->accumulator < (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            } else {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-
-                            sf->accumulator = temp_SBC;
+                            SBC_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_IND_Y:
-                            temp_SBC = sf->accumulator - (sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index] 
-                                                            + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
-                            
-                            // positive - negative overflow to negative
-                            if (((temp_SBC & 0x80) && 
-                                 (!(sf->accumulator & 0x80)) && 
-                                 ((sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) & 0x80)) ||
-                                 // negative - positive overflow to positive
-                                 (!(temp_SBC & 0x80)) &&
-                                 (sf->accumulator & 0x80) &&
-                                 (!((sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) & 0x80))
-                                 ) {
-                                sf->status |= (1 << OVERFLOW_INDEX);
-                            } else {
-                                sf->status &= ~(1 << OVERFLOW_INDEX);
-                            }
-
-                            if (sf->accumulator < (sf->memory[((sf->memory[sf->memory[sf->pc + 1] + 1] << 8)|sf->memory[sf->memory[sf->pc + 1]]) + sf->y_index] 
-                                + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            } else {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-
-                            sf->accumulator = temp_SBC;
+                            SBC_operation(sf, &IND_Y_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            temp_SBC = sf->accumulator - (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
-                            
-                            // positive - negative overflow to negative
-                            if (((temp_SBC & 0x80) && 
-                                 (!(sf->accumulator & 0x80)) && 
-                                 ((sf->memory[sf->memory[sf->pc + 1] + sf->x_index] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)) ||
-                                 // negative - positive overflow to positive
-                                ((!(temp_SBC & 0x80)) &&
-                                 (sf->accumulator & 0x80) &&
-                                 (!((sf->memory[sf->memory[sf->pc + 1] + sf->x_index] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)))
-                                 ) {
-                                sf->status |= (1 << OVERFLOW_INDEX);
-                            } else {
-                                sf->status &= ~(1 << OVERFLOW_INDEX);
-                            }
-
-                            if (sf->accumulator < (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            } else {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-
-                            sf->accumulator = temp_SBC;
+                            SBC_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_Y:
-                            temp_SBC = sf->accumulator - (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
-                            
-                            // positive - negative overflow to negative
-                            if (((temp_SBC & 0x80) && 
-                                 (!(sf->accumulator & 0x80)) && 
-                                 ((sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)) ||
-                                 // negative - positive overflow to positive
-                                ((!(temp_SBC & 0x80)) &&
-                                 (sf->accumulator & 0x80) &&
-                                 (!((sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)))
-                                 ) {
-                                sf->status |= (1 << OVERFLOW_INDEX);
-                            } else {
-                                sf->status &= ~(1 << OVERFLOW_INDEX);
-                            }
-
-                            if (sf->accumulator < (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            } else {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-
-                            sf->accumulator = temp_SBC;
+                            SBC_operation(sf, &ABS_Y_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ABS_X:
-                            temp_SBC = sf->accumulator - (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
-                            
-                            // positive - negative overflow to negative
-                            if (((temp_SBC & 0x80) && 
-                                 (!(sf->accumulator & 0x80)) && 
-                                 ((sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)) ||
-                                 // negative - positive overflow to positive
-                                ((!(temp_SBC & 0x80)) &&
-                                 (sf->accumulator & 0x80) &&
-                                 (!((sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] + ((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX))) & 0x80)))
-                                 ) {
-                                sf->status |= (1 << OVERFLOW_INDEX);
-                            } else {
-                                sf->status &= ~(1 << OVERFLOW_INDEX);
-                            }
-
-                            if (sf->accumulator < (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
-                                sf->status &= ~(1 << CARRY_INDEX);
-                            } else {
-                                sf->status |= (1 << CARRY_INDEX);
-                            }
-
-                            sf->accumulator = temp_SBC;
+                            SBC_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
                             break;
                     }
-
-                    if (sf->accumulator & 0x80) {
-                        sf->status |= (1 << NEGATIVE_INDEX);
-                    } else {
-                        sf->status &= ~(1 << NEGATIVE_INDEX);
-                    }
-
-                    if (sf->accumulator == 0x00) {
-                        sf->status |= (1 << ZERO_INDEX);
-                    } else {
-                        sf->status &= ~(1 << ZERO_INDEX);
-                    }
-
                     break;
 
                 case ((OP_INC & AAA_BITMASK) >> 3)|(OP_INC & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {
                         case ADDR_MODE_ZPG:
-                            sf->memory[sf->memory[sf->pc + 1]] += 1;
-                            
-                            if (sf->memory[sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[sf->memory[sf->pc + 1]] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-                            
+                            INC_operation(sf, &ZPG_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS:
-                            sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] += 1;
-
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[(sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-
+                            INC_operation(sf, &ABS_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         case ADDR_MODE_ZPG_X:
-                            sf->memory[sf->memory[sf->pc + 1] + sf->x_index] += 1;
-
-                            if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[sf->memory[sf->pc + 1] + sf->x_index] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-
+                            INC_operation(sf, &ZPG_X_MEM_ACCESS);
                             sf->pc += 2;
                             break;
                         case ADDR_MODE_ABS_X:
-                            sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] += 1;
-
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] & 0x80) {
-                                sf->status |= (1 << NEGATIVE_INDEX);
-                            } else {
-                                sf->status &= ~(1 << NEGATIVE_INDEX);
-                            }
-
-                            if (sf->memory[((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index] == 0x00) {
-                                sf->status |= (1 << ZERO_INDEX);
-                            } else {
-                                sf->status &= ~(1 << ZERO_INDEX);
-                            }
-
+                            INC_operation(sf, &ABS_X_MEM_ACCESS);
                             sf->pc += 3;
                             break;
                         default:
@@ -1646,6 +1164,5 @@ void process_line (sf_t *sf) {
                     break;
             }
             break;
-
     }
 }
