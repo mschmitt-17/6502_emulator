@@ -1,6 +1,10 @@
-#include "stdio.h"
+#include <stdio.h>
+#include <assert.h>
+
 #include "tests.h"
-#include "assert.h"
+#include "table.h"
+
+/* OPCODE TESTS */
 
 static int check_flags(uint8_t status, uint8_t negative, uint8_t overflow, uint8_t brk,
                         uint8_t decimal_mode, uint8_t interrupt_disable, uint8_t zero, uint8_t carry) {
@@ -24,13 +28,13 @@ static int check_flags(uint8_t status, uint8_t negative, uint8_t overflow, uint8
     }
     
     if (decimal_mode < 2) {
-        if (((decimal_mode & (1 << DECIMAL_INDEX)) >> DECIMAL_INDEX) != decimal_mode) {
+        if (((status & (1 << DECIMAL_INDEX)) >> DECIMAL_INDEX) != decimal_mode) {
             return -1;
         }
     }
     
     if (interrupt_disable < 2) {
-        if (((interrupt_disable & (1 << INTERRUPT_INDEX)) >> INTERRUPT_INDEX) != interrupt_disable) {
+        if (((status & (1 << INTERRUPT_INDEX)) >> INTERRUPT_INDEX) != interrupt_disable) {
             return -1;
         }
     }
@@ -52,7 +56,7 @@ static int check_flags(uint8_t status, uint8_t negative, uint8_t overflow, uint8
 
 // helper function for tests that should branch when flag is not set
 static int branch_not_set_test(sf_t *sf, uint8_t opcode, uint8_t flag_index) {
-    unsigned char offset = 0xF6;
+    unsigned char offset = 0x76;
     sf->memory[ROM_START] = opcode;
     sf->memory[ROM_START + 1] = offset;
     sf->status |= (1 << flag_index);
@@ -73,7 +77,7 @@ static int branch_not_set_test(sf_t *sf, uint8_t opcode, uint8_t flag_index) {
 
 // helper function for tests that should branch when flag is set
 static int branch_set_test(sf_t *sf, uint8_t opcode, uint8_t flag_index) {
-    unsigned char offset = 0xF6;
+    int8_t offset = 0xF6;
     sf->memory[ROM_START] = opcode;
     sf->memory[ROM_START + 1] = offset;
     // test when flag = 0
@@ -225,14 +229,14 @@ static int JI_TEST(sf_t *sf) {
 static int TXA_TYA_TEST(sf_t *sf) {
     sf->memory[ROM_START] = OP_TXA;
     sf->memory[ROM_START + 1] = OP_TYA;
-    sf->x_index = 0x12;
+    sf->x_index = 0x81;
     sf->y_index = 0x34;
     process_line(sf);
-    if (sf->accumulator != sf->x_index) {
+    if ((sf->accumulator != sf->x_index) || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
     process_line(sf);
-    if (sf->accumulator != sf->y_index) {
+    if ((sf->accumulator != sf->y_index) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
     return 0;
@@ -257,8 +261,11 @@ static int TAX_TAY_TEST(sf_t *sf) {
     sf->memory[ROM_START + 1] = OP_TAY;
     sf->accumulator = 0x76;
     process_line(sf);
+    if ((sf->x_index != sf->accumulator) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
+        return -1;
+    }
     process_line(sf);
-    if ((sf->x_index != sf->accumulator) || (sf->y_index != sf->accumulator)) {
+    if ((sf->y_index != sf->accumulator) || check_flags(sf->status, 0, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
     return 0;
@@ -270,31 +277,40 @@ static int BCS_TEST(sf_t *sf) {
 
 static int TSX_TEST(sf_t *sf) {
     sf->memory[ROM_START] = OP_TSX;
-    sf->esp = 0x12;
+    sf->esp = 0x00;
     process_line(sf);
-    if (sf->x_index != sf->esp) {
+    if ((sf->x_index != sf->esp) || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 2)) {
         return -1;
     }
     return 0;
 }
 
 static int INX_INY_TEST(sf_t *sf) {
+    sf->x_index = 0xFF;
+    sf->y_index = 0x7F;
     sf->memory[ROM_START] = OP_INX;
     sf->memory[ROM_START + 1] = OP_INY;
     process_line(sf);
+    if ((sf->x_index != 0x00) || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 2)) {
+        return -1;
+    }
     process_line(sf);
-    if ((sf->x_index != 1) || (sf->y_index != 1)) {
+    if ((sf->y_index != 0x80) || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
         return -1;
     }
     return 0;
 }
 
 static int DEX_DEY_TEST(sf_t *sf) {
+    sf->y_index = 0x01;
     sf->memory[ROM_START] = OP_DEX;
     sf->memory[ROM_START + 1] = OP_DEY;
     process_line(sf);
+    if (sf->x_index != 0xFF || check_flags(sf->status, 1, 2, 2, 2, 2, 0, 2)) {
+        return -1;
+    } 
     process_line(sf);
-    if ((sf->x_index != 0xFF) || (sf->y_index != 0xFF)) { // unsigned values will overflow
+    if ((sf->y_index != 0x00) || check_flags(sf->status, 0, 2, 2, 2, 2, 1, 2)) { // unsigned values will overflow
         return -1;
     }
     return 0;
@@ -899,49 +915,50 @@ static int ADC_TEST(sf_t *sf) {
 
     sf->pc = ROM_START;
     sf->y_index = 0x08;
-    sf->accumulator = 0xF3;
+    sf->status |= (1 << DECIMAL_INDEX);
+    sf->accumulator = 0x49;
     sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_IND_Y << 2);
     sf->memory[ROM_START + 1] = 0xFF;
     sf->memory[0xFF] = 0x25;
     sf->memory[0x100] = 0x1D;
-    sf->memory[0x1D2D] = 0x09;
+    sf->memory[0x1D2D] = 0x40;
     process_line(sf);
-    if (sf->accumulator != 0xFD || check_flags(sf->status, 1, 0, 2, 2, 2, 0, 0)) {
+    if (sf->accumulator != 0x90 || check_flags(sf->status, 1, 1, 2, 1, 2, 0, 0)) {
         return -1;
     }
 
     sf->pc = ROM_START;
     sf->x_index = 0xF4;
-    sf->accumulator = 0x00;
+    sf->accumulator = 0x80;
     sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_ZPG_X << 2);
     sf->memory[ROM_START + 1] = 0x02;
-    sf->memory[0xF6] = 0x67;
+    sf->memory[0xF6] = 0x20;
     process_line(sf);
-    if (sf->accumulator != 0x67 || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 0)) {
+    if (sf->accumulator != 0x00 || check_flags(sf->status, 0, 0, 2, 1, 2, 1, 1)) {
         return -1;
     }
 
     sf->pc = ROM_START;
     sf->y_index = 0xE4;
-    sf->accumulator = 0xF2;
+    sf->accumulator = 0x99;
     sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_ABS_Y << 2);
     sf->memory[ROM_START + 1] = 0x3A;
     sf->memory[ROM_START + 2] = 0x33;
-    sf->memory[0x333A + 0xE4] = 0x34;
+    sf->memory[0x333A + 0xE4] = 0x99;
     process_line(sf);
-    if (sf->accumulator != 0x26 || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 1)) {
+    if (sf->accumulator != 0x99 || check_flags(sf->status, 1, 0, 2, 1, 2, 0, 1)) {
         return -1;
     }
 
     sf->pc = ROM_START;
     sf->x_index = 0xE4;
-    sf->accumulator = 0xF2;
+    sf->accumulator = 0x87;
     sf->memory[ROM_START] = OP_ADC | (ADDR_MODE_ABS_X << 2);
     sf->memory[ROM_START + 1] = 0x3A;
     sf->memory[ROM_START + 2] = 0x33;
-    sf->memory[0x333A + 0xE4] = 0x34;
+    sf->memory[0x333A + 0xE4] = 0x83;
     process_line(sf);
-    if (sf->accumulator != 0x27 || check_flags(sf->status, 0, 0, 2, 2, 2, 0, 1)) {
+    if (sf->accumulator != 0x71 || check_flags(sf->status, 0, 1, 2, 1, 2, 0, 1)) {
         return -1;
     }
 
@@ -1574,6 +1591,7 @@ static int SBC_TEST(sf_t *sf) {
     }
 
     sf->pc = ROM_START;
+    sf->status |= (1 << DECIMAL_INDEX);
     sf->status |= (1 << CARRY_INDEX);
     sf->y_index = 0x54;
     sf->accumulator = 0x19;
@@ -1583,7 +1601,7 @@ static int SBC_TEST(sf_t *sf) {
     sf->memory[0x68] = 0x91;
     sf->memory[0x9128 + 0x54] = 0x19;
     process_line(sf);
-    if (sf->accumulator != 0x00 || check_flags(sf->status, 0, 0, 2, 2, 2, 1, 1)) {
+    if (sf->accumulator != 0x00 || check_flags(sf->status, 0, 0, 2, 1, 2, 1, 1)) {
         return -1;
     }
 
@@ -1595,7 +1613,7 @@ static int SBC_TEST(sf_t *sf) {
     sf->memory[ROM_START + 1] = 0x89;
     sf->memory[0x89 + 0x61] = 0x41;
     process_line(sf);
-    if (sf->accumulator != 0xE1 || check_flags(sf->status, 1, 0, 2, 2, 2, 0, 0)) {
+    if (sf->accumulator != 0x80 || check_flags(sf->status, 1, 0, 2, 1, 2, 0, 0)) {
         return -1;
     }
 
@@ -1608,20 +1626,20 @@ static int SBC_TEST(sf_t *sf) {
     sf->memory[ROM_START + 2] = 0xAB;
     sf->memory[0xABBA] = 0x12;
     process_line(sf);
-    if (sf->accumulator != 0x7F || check_flags(sf->status, 0, 1, 2, 2, 2, 0, 1)) {
+    if (sf->accumulator != 0x79 || check_flags(sf->status, 0, 1, 2, 1, 2, 0, 1)) {
         return -1;
     }
 
     sf->pc = ROM_START;
     sf->status |= (1 << CARRY_INDEX);
     sf->x_index = 0x07;
-    sf->accumulator = 0xA2;
+    sf->accumulator = 0x76;
     sf->memory[ROM_START] = OP_SBC | (ADDR_MODE_ABS_X << 2);
     sf->memory[ROM_START + 1] = 0xB7;
     sf->memory[ROM_START + 2] = 0xBA;
-    sf->memory[0xBABE] = 0x11;
+    sf->memory[0xBABE] = 0x23;
     process_line(sf);
-    if (sf->accumulator != 0x91 || check_flags(sf->status, 1, 0, 2, 2, 2, 0, 1)) {
+    if (sf->accumulator != 0x53 || check_flags(sf->status, 0, 0, 2, 1, 2, 0, 1)) {
         return -1;
     }
 
@@ -1671,7 +1689,7 @@ static int INC_TEST(sf_t *sf) {
     return 0;
 }
 
-static int run_test(sf_t *sf, int (*test_ptr)(sf_t *), char *test_name) {
+static int run_opcode_test(sf_t *sf, int (*test_ptr)(sf_t *), char *test_name) {
     initialize_regs(sf);
 
     if ((*test_ptr)(sf) < 0) {
@@ -1680,51 +1698,84 @@ static int run_test(sf_t *sf, int (*test_ptr)(sf_t *), char *test_name) {
     }
 }
 
-int run_tests(sf_t *sf) {
-    assert(run_test(sf, BRK_RTI_TEST, "BRK_RTI_TEST") == 0);
-    assert(run_test(sf, PHP_PLP_TEST, "PHP_PLP_TEST") == 0);
-    assert(run_test(sf, BPL_TEST, "BPL_TEST") == 0);
-    assert(run_test(sf, CLC_CLD_CLI_CLV_TEST, "CLC_CLD_CLI_CLV_TEST") == 0);
-    assert(run_test(sf, JSR_RTS_TEST, "JSR_RTS_TEST") == 0);
-    assert(run_test(sf, BMI_TEST, "BMI_TEST") == 0);
-    assert(run_test(sf, SEC_SED_SEI_TEST, "SEC_SED_SEI_TEST") == 0);
-    assert(run_test(sf, JMP_TEST, "JMP_TEST") == 0);
-    assert(run_test(sf, BVC_TEST, "BVC_TEST") == 0);
-    assert(run_test(sf, BVS_TEST, "BVS_TEST") == 0);
-    assert(run_test(sf, JI_TEST, "JI_TEST") == 0);
-    assert(run_test(sf, TXA_TYA_TEST, "TXA_TYA_TEST") == 0);
-    assert(run_test(sf, BCC_TEST, "BCC_TEST") == 0);
-    assert(run_test(sf, TXS_TEST, "TXS_TEST") == 0);
-    assert(run_test(sf, TAX_TAY_TEST, "TAX_TAY_TEST") == 0);
-    assert(run_test(sf, BCS_TEST, "BCS_TEST") == 0);
-    assert(run_test(sf, TSX_TEST, "TSX_TEST") == 0);
-    assert(run_test(sf, INX_INY_TEST, "INX_INY_TEST") == 0);
-    assert(run_test(sf, DEX_DEY_TEST, "DEX_DEY_TEST") == 0);
-    assert(run_test(sf, BNE_TEST, "BNE_TEST") == 0);
-    assert(run_test(sf, NOP_TEST, "NOP_TEST") == 0);
-    assert(run_test(sf, BEQ_TEST, "BEQ_TEST") == 0);
-    assert(run_test(sf, ORA_TEST, "ORA_TEST") == 0);
-    assert(run_test(sf, ASL_TEST, "ASL_TEST") == 0);
-    assert(run_test(sf, BIT_TEST, "BIT_TEST") == 0);
-    assert(run_test(sf, AND_TEST, "AND_TEST") == 0);
-    assert(run_test(sf, ROL_TEST, "ROL_TEST") == 0);
-    assert(run_test(sf, EOR_TEST, "EOR_TEST") == 0);
-    assert(run_test(sf, LSR_TEST, "LSR_TEST") == 0);
-    assert(run_test(sf, ADC_TEST, "ADC_TEST") == 0);
-    assert(run_test(sf, ROR_TEST, "ROR_TEST") == 0);
-    assert(run_test(sf, STY_TEST, "STY_TEST") == 0);
-    assert(run_test(sf, STA_TEST, "STA_TEST") == 0);
-    assert(run_test(sf, STX_TEST, "STX_TEST") == 0);
-    assert(run_test(sf, LDY_TEST, "LDY_TEST") == 0);
-    assert(run_test(sf, LDA_TEST, "LDA_TEST") == 0);
-    assert(run_test(sf, LDX_TEST, "LDX_TEST") == 0);
-    assert(run_test(sf, CPY_TEST, "CPY_TEST") == 0);
-    //assert(run_test(sf, CMP_TEST, "CMP_TEST") == 0);
-    assert(run_test(sf, DEC_TEST, "DEC_TEST") == 0);
-    assert(run_test(sf, CPX_TEST, "CPX_TEST") == 0);
-    assert(run_test(sf, SBC_TEST, "SBC_TEST") == 0);
-    assert(run_test(sf, INC_TEST, "INC_TEST") == 0);
+int run_opcode_tests(sf_t *sf) {
+    assert(run_opcode_test(sf, BRK_RTI_TEST, "BRK_RTI_TEST") == 0);
+    assert(run_opcode_test(sf, PHP_PLP_TEST, "PHP_PLP_TEST") == 0);
+    assert(run_opcode_test(sf, BPL_TEST, "BPL_TEST") == 0);
+    assert(run_opcode_test(sf, CLC_CLD_CLI_CLV_TEST, "CLC_CLD_CLI_CLV_TEST") == 0);
+    assert(run_opcode_test(sf, JSR_RTS_TEST, "JSR_RTS_TEST") == 0);
+    assert(run_opcode_test(sf, BMI_TEST, "BMI_TEST") == 0);
+    assert(run_opcode_test(sf, SEC_SED_SEI_TEST, "SEC_SED_SEI_TEST") == 0);
+    assert(run_opcode_test(sf, JMP_TEST, "JMP_TEST") == 0);
+    assert(run_opcode_test(sf, BVC_TEST, "BVC_TEST") == 0);
+    assert(run_opcode_test(sf, BVS_TEST, "BVS_TEST") == 0);
+    assert(run_opcode_test(sf, JI_TEST, "JI_TEST") == 0);
+    assert(run_opcode_test(sf, TXA_TYA_TEST, "TXA_TYA_TEST") == 0);
+    assert(run_opcode_test(sf, BCC_TEST, "BCC_TEST") == 0);
+    assert(run_opcode_test(sf, TXS_TEST, "TXS_TEST") == 0);
+    assert(run_opcode_test(sf, TAX_TAY_TEST, "TAX_TAY_TEST") == 0);
+    assert(run_opcode_test(sf, BCS_TEST, "BCS_TEST") == 0);
+    assert(run_opcode_test(sf, TSX_TEST, "TSX_TEST") == 0);
+    assert(run_opcode_test(sf, INX_INY_TEST, "INX_INY_TEST") == 0);
+    assert(run_opcode_test(sf, DEX_DEY_TEST, "DEX_DEY_TEST") == 0);
+    assert(run_opcode_test(sf, BNE_TEST, "BNE_TEST") == 0);
+    assert(run_opcode_test(sf, NOP_TEST, "NOP_TEST") == 0);
+    assert(run_opcode_test(sf, BEQ_TEST, "BEQ_TEST") == 0);
+    assert(run_opcode_test(sf, ORA_TEST, "ORA_TEST") == 0);
+    assert(run_opcode_test(sf, ASL_TEST, "ASL_TEST") == 0);
+    assert(run_opcode_test(sf, BIT_TEST, "BIT_TEST") == 0);
+    assert(run_opcode_test(sf, AND_TEST, "AND_TEST") == 0);
+    assert(run_opcode_test(sf, ROL_TEST, "ROL_TEST") == 0);
+    assert(run_opcode_test(sf, EOR_TEST, "EOR_TEST") == 0);
+    assert(run_opcode_test(sf, LSR_TEST, "LSR_TEST") == 0);
+    assert(run_opcode_test(sf, ADC_TEST, "ADC_TEST") == 0);
+    assert(run_opcode_test(sf, ROR_TEST, "ROR_TEST") == 0);
+    assert(run_opcode_test(sf, STY_TEST, "STY_TEST") == 0);
+    assert(run_opcode_test(sf, STA_TEST, "STA_TEST") == 0);
+    assert(run_opcode_test(sf, STX_TEST, "STX_TEST") == 0);
+    assert(run_opcode_test(sf, LDY_TEST, "LDY_TEST") == 0);
+    assert(run_opcode_test(sf, LDA_TEST, "LDA_TEST") == 0);
+    assert(run_opcode_test(sf, LDX_TEST, "LDX_TEST") == 0);
+    assert(run_opcode_test(sf, CPY_TEST, "CPY_TEST") == 0);
+    //assert(run_opcode_test(sf, CMP_TEST, "CMP_TEST") == 0);
+    assert(run_opcode_test(sf, DEC_TEST, "DEC_TEST") == 0);
+    assert(run_opcode_test(sf, CPX_TEST, "CPX_TEST") == 0);
+    assert(run_opcode_test(sf, SBC_TEST, "SBC_TEST") == 0);
+    assert(run_opcode_test(sf, INC_TEST, "INC_TEST") == 0);
 
     printf("ALL TESTS PASSED!\n");
+    return 0;
+}
+
+/* DATA STRUCTURE TESTS */
+
+int table_test() {
+    Table_t *t = new_table(8);
+    if (t->size != 8 || t->occupied != 0) {
+        return -1;
+    }
+    
+    add_to_table(&t, "test1", 0xBEEF);
+    if (get_value(t, "test1") != 0xBEEF) {
+        return -1;
+    }
+    
+    add_to_table(&t, "test2", 0xDEAD);
+    add_to_table(&t, "test3", 0xBABE);
+    add_to_table(&t, "test4", 0xBABA);
+    add_to_table(&t, "test5", 0xCACA);
+    add_to_table(&t, "test6", 0xACDC);
+    add_to_table(&t, "test7", 0xDEAF);
+
+    if (t->size != 16 || t->occupied != 7) {
+        return -1;
+    }
+
+    if (get_value(t, "test3") != 0xBABE) {
+        return -1;
+    }
+
+    free_table(t);
+
     return 0;
 }

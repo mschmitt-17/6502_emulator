@@ -1,5 +1,17 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
 #include "6502.h"
-#include "string.h"
+#include "error.h"
+
+void load_bytecode(sf_t *sf, Bytecode_t *bc, uint16_t load_address, uint32_t num_bytes) {
+    if(load_address + num_bytes > MEMORY_SIZE) {
+        fprintf(stderr, "Insufficient memory to load bytecode at address %u\n", load_address);
+        exit(ERR_NO_MEM);
+    }
+    memcpy(sf->memory + sf->pc, bc->start, num_bytes);
+}
 
 // maybe change this to load_rom function since we want to reset everything when starting new game
 void initialize_regs(sf_t *sf) {
@@ -24,6 +36,24 @@ static void check_negative_and_zero(sf_t *sf, uint8_t operand) {
     } else {
         sf->status &= ~(1 << ZERO_INDEX);
     }
+}
+
+static uint8_t hex_to_bcd(uint8_t hex) {
+    if (((hex & 0xF0) > 0x90) || ((hex & 0x0F) > 0x09)) { // if we have A-F in number we wish to convert, return error
+        return 0xFF;
+    }
+    uint8_t dec = ((hex & 0xF0) >> 4) * 10;
+    dec += hex & 0x0F;
+    return dec;
+}
+
+static uint8_t bcd_to_hex(uint8_t dec) {
+    if (dec > 99) {
+        return 0xFF;
+    }
+    uint8_t hex = (dec/10) * 16;
+    hex += dec % 10;
+    return hex;
 }
 
 static void ORA_operation(sf_t *sf, uint8_t *operand) {
@@ -91,25 +121,49 @@ static void LSR_operation(sf_t *sf, uint8_t *operand) {
 }
 
 static void ADC_operation(sf_t *sf, uint8_t *operand) {
-    uint16_t temp = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX)) + *operand;
-    if (((temp & 0x80) && // positive + positive = negative
-         (!(sf->accumulator & 0x80)) &&
-         (!(((*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX))) & 0x80))) ||
-        ((!(temp & 0x80)) && // negative + negative = positive
-         (sf->accumulator & 0x80) &&
-         (((*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX))) & 0x80))) {
-        sf->status |= (1 << OVERFLOW_INDEX);
+    if (sf->status & (1 << DECIMAL_INDEX)) {
+        uint8_t temp = hex_to_bcd(sf->accumulator) + hex_to_bcd(*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX));
+        
+        if (temp > 99) {
+            sf->status |= (1 << CARRY_INDEX);
+        } else {
+            sf->status &= ~(1 << CARRY_INDEX);
+        }
+
+        temp = temp % 100;
+
+        if (((temp > 80) && // positive + positive = negative
+             (hex_to_bcd(sf->accumulator) < 80) &&
+             ((hex_to_bcd(*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX))) < 80)) ||
+           ((temp < 80) && // negative + negative = positive
+            (hex_to_bcd(sf->accumulator) > 80) &&
+            ((hex_to_bcd(*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX))) > 80))) {
+            sf->status |= (1 << OVERFLOW_INDEX);
+        } else {
+            sf->status &= ~(1 << OVERFLOW_INDEX);
+        }
+
+        sf->accumulator = bcd_to_hex(temp);
     } else {
-        sf->status &= ~(1 << OVERFLOW_INDEX);
+        uint16_t temp = sf->accumulator + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX)) + *operand;
+        if (((temp & 0x80) && // positive + positive = negative
+            (!(sf->accumulator & 0x80)) &&
+            (!(((*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX))) & 0x80))) ||
+            ((!(temp & 0x80)) && // negative + negative = positive
+            (sf->accumulator & 0x80) &&
+            (((*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX))) & 0x80))) {
+            sf->status |= (1 << OVERFLOW_INDEX);
+        } else {
+            sf->status &= ~(1 << OVERFLOW_INDEX);
+        }
+        sf->accumulator = (temp & 0xFF);
+        
+        if (temp & 0x100) {
+            sf->status |= (1 << CARRY_INDEX);
+        } else {
+            sf->status &= ~(1 << CARRY_INDEX);
+        }
     }
-    sf->accumulator = (temp & 0xFF);
-    
-    if (temp & 0x100) {
-        sf->status |= (1 << CARRY_INDEX);
-    } else {
-        sf->status &= ~(1 << CARRY_INDEX);
-    }
-    
     check_negative_and_zero(sf, sf->accumulator);
 }
 
@@ -278,42 +332,53 @@ static void CPX_operation(sf_t *sf, uint8_t *operand) {
 }
 
 static void SBC_operation(sf_t *sf, uint8_t *operand) {
-    uint8_t temp = sf->accumulator - ((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
-    
-    // positive - negative overflow to negative
-    if (((temp & 0x80) && 
+    if (sf->status & (1 << DECIMAL_INDEX)) {
+        uint8_t temp;
+        if (hex_to_bcd(sf->accumulator) < (hex_to_bcd(*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
+            temp = 99 - ((hex_to_bcd(*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) - hex_to_bcd(sf->accumulator));
+            sf->status &= ~(1 << CARRY_INDEX);
+        } else {
+            temp = hex_to_bcd(sf->accumulator) - (hex_to_bcd(*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
+            sf->status |= (1 << CARRY_INDEX);
+        }
+
+        if (((temp > 80) && 
+            (hex_to_bcd(sf->accumulator) < 80) && 
+            ((hex_to_bcd(*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) > 80)) ||
+            ((temp < 80) &&
+             (hex_to_bcd(sf->accumulator) > 80) &&
+            (((hex_to_bcd(*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) < 80)))) {
+            sf->status |= (1 << OVERFLOW_INDEX);
+        } else {
+            sf->status &= ~(1 << OVERFLOW_INDEX);
+        }
+
+        sf->accumulator = bcd_to_hex(temp);
+    } else {
+        uint8_t temp = sf->accumulator - ((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX));
+        
+        if (((temp & 0x80) && 
             (!(sf->accumulator & 0x80)) && 
             (((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) & 0x80)) ||
-            // negative - positive overflow to positive
             (!(temp & 0x80)) &&
             (sf->accumulator & 0x80) &&
             (!(((((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX)) & 0x80))))
             ) {
-        sf->status |= (1 << OVERFLOW_INDEX);
-    } else {
-        sf->status &= ~(1 << OVERFLOW_INDEX);
-    }
+            sf->status |= (1 << OVERFLOW_INDEX);
+        } else {
+            sf->status &= ~(1 << OVERFLOW_INDEX);
+        }
 
-    // check carry
-    if (sf->accumulator < ((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
-        sf->status &= ~(1 << CARRY_INDEX);
-    } else {
-        sf->status |= (1 << CARRY_INDEX);
-    }
+        // check carry
+        if (sf->accumulator < ((*operand) + (((sf->status & (1 << CARRY_INDEX)) ^ (1 << CARRY_INDEX)) >> CARRY_INDEX))) {
+            sf->status &= ~(1 << CARRY_INDEX);
+        } else {
+            sf->status |= (1 << CARRY_INDEX);
+        }
 
-    sf->accumulator = temp;
-
-    if (sf->accumulator & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
+        sf->accumulator = temp;
     }
-
-    if (sf->accumulator == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, sf->accumulator);
 }
 
 static void INC_operation(sf_t *sf, uint8_t *operand) {
@@ -352,7 +417,7 @@ void process_line (sf_t *sf) {
         
         case OP_BPL:
             if (!(sf->status & (1 << NEGATIVE_INDEX))) {
-                sf->pc += sf->memory[sf->pc + 1]; // offset is stored in following byte
+                sf->pc += (int8_t) sf->memory[sf->pc + 1]; // offset is stored in following byte
             } else {
                 sf->pc += 2; // skip offset
             }
@@ -378,7 +443,7 @@ void process_line (sf_t *sf) {
 
         case OP_BMI:
             if (sf->status & (1 << NEGATIVE_INDEX)) {
-                sf->pc += sf->memory[sf->pc + 1];
+                sf->pc += (int8_t)sf->memory[sf->pc + 1];
             } else {
                 sf->pc += 2;
             }
@@ -407,7 +472,7 @@ void process_line (sf_t *sf) {
 
         case OP_BVC:
             if (!(sf->status & (1 << OVERFLOW_INDEX))) {
-                sf->pc += sf->memory[sf->pc + 1];
+                sf->pc += (int8_t)sf->memory[sf->pc + 1];
             } else {
                 sf->pc += 2;
             }
@@ -436,7 +501,7 @@ void process_line (sf_t *sf) {
 
         case OP_BVS:
             if (sf->status & (1 << OVERFLOW_INDEX)) {
-                sf->pc += sf->memory[sf->pc + 1];
+                sf->pc += (int8_t)sf->memory[sf->pc + 1];
             } else {
                 sf->pc += 2;
             }
@@ -449,17 +514,19 @@ void process_line (sf_t *sf) {
 
         case OP_DEY:
             sf->y_index--;
+            check_negative_and_zero(sf, sf->y_index);
             sf->pc++;
             break;
 
         case OP_TXA:
             sf->accumulator = sf->x_index;
+            check_negative_and_zero(sf, sf->accumulator);
             sf->pc++;
             break;
 
         case OP_BCC:
             if (!(sf->status & (1 << CARRY_INDEX))) {
-                sf->pc += sf->memory[sf->pc + 1];
+                sf->pc += (int8_t)sf->memory[sf->pc + 1];
             } else {
                 sf->pc += 2;
             }
@@ -467,6 +534,7 @@ void process_line (sf_t *sf) {
 
         case OP_TYA:
             sf->accumulator = sf->y_index;
+            check_negative_and_zero(sf, sf->accumulator);
             sf->pc++;
             break;
 
@@ -477,17 +545,19 @@ void process_line (sf_t *sf) {
 
         case OP_TAY:
             sf->y_index = sf->accumulator;
+            check_negative_and_zero(sf, sf->y_index);
             sf->pc++;
             break;
 
         case OP_TAX:
             sf->x_index = sf->accumulator;
+            check_negative_and_zero(sf, sf->x_index);
             sf->pc++;
             break;
 
         case OP_BCS:
             if (sf->status & (1 << CARRY_INDEX)) {
-                sf->pc += sf->memory[sf->pc + 1];
+                sf->pc += (int8_t)sf->memory[sf->pc + 1];
             } else {
                 sf->pc += 2;
             }
@@ -500,22 +570,25 @@ void process_line (sf_t *sf) {
 
         case OP_TSX:
             sf->x_index = sf->esp;
+            check_negative_and_zero(sf, sf->x_index);
             sf->pc++;
             break;
 
         case OP_INY:
             sf->y_index++;
+            check_negative_and_zero(sf, sf->y_index);
             sf->pc++;
             break;
 
         case OP_DEX:
             sf->x_index--;
+            check_negative_and_zero(sf, sf->x_index);
             sf->pc++;
             break;
 
         case OP_BNE:
             if (!(sf->status & (1 << ZERO_INDEX))) {
-                sf->pc += sf->memory[sf->pc + 1];
+                sf->pc += (int8_t)sf->memory[sf->pc + 1];
             } else {
                 sf->pc += 2;
             }
@@ -528,6 +601,7 @@ void process_line (sf_t *sf) {
 
         case OP_INX:
             sf->x_index++;
+            check_negative_and_zero(sf, sf->x_index);
             sf->pc++;
             break;
 
@@ -537,7 +611,7 @@ void process_line (sf_t *sf) {
 
         case OP_BEQ:
             if (sf->status & (1 << ZERO_INDEX)) {
-                sf->pc += sf->memory[sf->pc + 1];
+                sf->pc += (int8_t)sf->memory[sf->pc + 1];
             } else {
                 sf->pc += 2;
             }
@@ -549,7 +623,7 @@ void process_line (sf_t *sf) {
             break;
 
         default:
-            // switch case for other shit here
+            // non special-case operations
             switch (((sf->memory[sf->pc] & AAA_BITMASK) >> 3) | (sf->memory[sf->pc] & CC_BITMASK)) {
                 case ((OP_ORA & AAA_BITMASK) >> 3) | (OP_ORA & CC_BITMASK):
                     switch((sf->memory[sf->pc] & BBB_BITMASK) >> 2) {

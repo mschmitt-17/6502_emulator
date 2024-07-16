@@ -1,7 +1,9 @@
 #ifndef _6502_H
 #define _6502_H
 
-#include "stdint.h"
+#include <stdint.h>
+
+#include "bytecode.h"
 
 #define MEMORY_SIZE     (65536)
 #define IRQ_ADDRESS     (0xFFFE)
@@ -48,14 +50,13 @@
 #define ROM_START           (0x8000)
 #define RAM_START           (0xC000)
 
-/* OPCODES */
-
 /* SPECIAL CASE OPCODES (one addressing mode) */
 #define OP_BRK      (0x00) // forced interrupt
 #define OP_PHP      (0x08) // push processor status on stack
 #define OP_BPL      (0x10) // branch on N = 0
 #define OP_CLC      (0x18) // clear carry flag
 #define OP_JSR      (0x20) // jump to subroutine after pushing return address to stack
+#define OP_JSR_PARSE (0x24) // used since JSR shares opcode with BIT
 #define OP_PLP      (0x28) // pull processor status from stack
 #define OP_BMI      (0x30) // branch on N = 1
 #define OP_SEC      (0x38) // set carry flag
@@ -88,6 +89,8 @@
 #define OP_BEQ      (0xF0) // branch on zero flag set
 #define OP_SED      (0xF8) // set decimal mode
 
+#define OP_SKIP      (0xBB) // dummy opcode for if we wish to skip a line
+
 /* NORMAL OPCODES (multiple addressing modes) */
 #define OP_ORA      (0x01) // or memory (determined by addressing mode) with accumulator, result stored in accumulator
 #define OP_ASL      (0x02) // arithmetic shift left one bit
@@ -112,16 +115,21 @@
 #define OP_INC      (0xE2) // increment memory by one
 
 /* ADDRESSING MODES (obtained using BBB_BITMASK and right shifting) */
-#define ADDR_MODE_IND_X     (0x00)
-#define ADDR_MODE_ZPG       (0x01)
-#define ADDR_MODE_IMM       (0x02)
-#define ADDR_MODE_ACCUM     (0x02)
-#define ADDR_MODE_ABS       (0x03)
-#define ADDR_MODE_IND_Y     (0x04)
-#define ADDR_MODE_ZPG_X     (0x05)
-#define ADDR_MODE_ZPG_Y     (0x05) // opcodes that store or load x_index use this mode
-#define ADDR_MODE_ABS_Y     (0x06)
-#define ADDR_MODE_ABS_X     (0x07)
+#define ADDR_MODE_IND_X             (0x00)
+#define ADDR_MODE_ZPG               (0x01)
+#define ADDR_MODE_IMM               (0x02)
+#define ADDR_MODE_ACCUM             (0x02)
+#define ADDR_MODE_ABS               (0x03)
+#define ADDR_MODE_IND_Y             (0x04)
+#define ADDR_MODE_ZPG_X             (0x05)
+#define ADDR_MODE_ZPG_Y             (0x05) // opcodes that store or load x_index use this mode
+#define ADDR_MODE_ABS_Y             (0x06)
+#define ADDR_MODE_ABS_X             (0x07)
+#define ADDR_MODE_IMP               (0x08) // for parsing only
+#define ADDR_MODE_ACCUM_PARSE       (0x09) // for parsing only
+#define ADDR_MODE_ZPG_Y_PARSE       (0x0A) // for parsing only
+#define ADDR_MODE_IND               (0x0E) // only for indirect jump instruction
+
 
 /* MEMORY ACCESS MACROS */
 #define IND_X_MEM_ACCESS    (sf->memory[((sf->memory[((sf->x_index + sf->memory[sf->pc + 1]) + 1) % 0xFF] << 8) | (sf->memory[(sf->x_index + sf->memory[sf->pc + 1]) % 0xFF]))]) // add x_index without carry
@@ -144,6 +152,9 @@ typedef struct sf {
     uint16_t pc;
     uint8_t memory[MEMORY_SIZE];
 } sf_t;
+
+/* loads passed number of bytes from bytecode to passed load address */
+void load_bytecode(sf_t *sf, Bytecode_t *bc, uint16_t load_address, uint32_t num_bytes);
 
 /* initializes registers to all zeroes, to be called before game is run */
 void initialize_regs(sf_t *sf);

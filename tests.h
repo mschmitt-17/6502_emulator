@@ -11,6 +11,7 @@
 #define MAGIC_FIVE  0x90
 #define MAGIC_SIZ   0x09
 
-int run_tests(sf_t *sf);
+int run_opcode_tests(sf_t *sf);
+int table_test();
 
 #endif
