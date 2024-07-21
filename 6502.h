@@ -56,7 +56,7 @@
 #define OP_BPL      (0x10) // branch on N = 0
 #define OP_CLC      (0x18) // clear carry flag
 #define OP_JSR      (0x20) // jump to subroutine after pushing return address to stack
-#define OP_JSR_PARSE (0x24) // used since JSR shares opcode with BIT
+#define OP_JSR_GEN  (0x24) // used since JSR shares opcode with BIT
 #define OP_PLP      (0x28) // pull processor status from stack
 #define OP_BMI      (0x30) // branch on N = 1
 #define OP_SEC      (0x38) // set carry flag
@@ -126,8 +126,8 @@
 #define ADDR_MODE_ABS_Y             (0x06)
 #define ADDR_MODE_ABS_X             (0x07)
 #define ADDR_MODE_IMP               (0x08) // for parsing only
-#define ADDR_MODE_ACCUM_PARSE       (0x09) // for parsing only
-#define ADDR_MODE_ZPG_Y_PARSE       (0x0A) // for parsing only
+#define ADDR_MODE_ACCUM_GEN        (0x09) // for parsing only
+#define ADDR_MODE_ZPG_Y_GEN        (0x0A) // for parsing only
 #define ADDR_MODE_IND               (0x0E) // only for indirect jump instruction
 
 

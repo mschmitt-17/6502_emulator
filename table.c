@@ -110,10 +110,11 @@ Table_t *new_table(uint32_t size) {
  *      INPUTS: t_dbl_ptr -- double pointer to table we wish to add to
  *              key -- string to hash
  *              value -- value to store in table with hashed string
- *      OUTPUTS: none
+ *      OUTPUTS: -1 -- value was already present in table
+ *                0 -- value was not already present in table
  *      SIDE EFFECTS: adds new key-value pair to table
  */
-void add_to_table(Table_t **t_dbl_ptr, char *key, uint16_t value) {
+int add_to_table(Table_t **t_dbl_ptr, char *key, uint16_t value) {
     if (((float)(*t_dbl_ptr)->occupied)/(*t_dbl_ptr)->size >= TIME_TO_GROW) {
         Table_t *new_t = new_table((*t_dbl_ptr)->size * GROWTH_FACTOR);
         copy_table(*t_dbl_ptr, new_t);
@@ -123,6 +124,9 @@ void add_to_table(Table_t **t_dbl_ptr, char *key, uint16_t value) {
 
     uint32_t index = RSHash(key, strlen(key)) % (*t_dbl_ptr)->size;
     while ((*t_dbl_ptr)->data[index].key != NULL) {
+        if (!(strcmp((*t_dbl_ptr)->data[index].key, key))) {
+            return -1;
+        }
         index = (index + JSHash(key, strlen(key))) % (*t_dbl_ptr)->size;
     }
 
@@ -130,6 +134,8 @@ void add_to_table(Table_t **t_dbl_ptr, char *key, uint16_t value) {
     strcpy((*t_dbl_ptr)->data[index].key, key);
     (*t_dbl_ptr)->data[index].value = value;
     (*t_dbl_ptr)->occupied++;
+    
+    return 0;
 }
 
 /* get_value

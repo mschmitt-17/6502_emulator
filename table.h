@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#define INITIAL_SIZE    256
-
 typedef struct Entry {
     char *key;
     uint16_t value;
@@ -18,7 +16,7 @@ typedef struct Table {
 
 Table_t *new_table(uint32_t size);
 void free_table(Table_t *t);
-void add_to_table(Table_t **t_dbl_ptr, char *key, uint16_t value);
+int add_to_table(Table_t **t_dbl_ptr, char *key, uint16_t value);
 uint16_t get_value(Table_t *t, char *key);
 
 #endif

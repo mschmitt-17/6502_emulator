@@ -3,9 +3,8 @@
 #include <string.h>
 
 #include "tests.h"
-#include "assembler.h"
-
-#define RUN_TESTS
+#include "generator.h"
+#include "scanner.h"
 
 int main() {
     sf_t *sf = (sf_t *)malloc(sizeof(sf_t));
@@ -14,13 +13,13 @@ int main() {
     run_opcode_tests(sf);
     table_test();
 #else
-    Bytecode_t * bc = assembly_to_bytecode("test.txt");
+    Clip_t *c = assembly_to_clip("scan_test.txt");
     initialize_regs(sf);
-    load_bytecode(sf, bc, ROM_START, bc->index);
+    //load_bytecode(sf, bc, ROM_START, bc->index);
     for (int i = 0; i < 99; i++) {
         process_line(sf);
     }
-    free_bytecode(bc);
+    //free_bytecode(bc);
 #endif
     
     free(sf);

@@ -2,8 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "lib.h"
 #include "6502.h"
-#include "error.h"
 
 void load_bytecode(sf_t *sf, Bytecode_t *bc, uint16_t load_address, uint32_t num_bytes) {
     if(load_address + num_bytes > MEMORY_SIZE) {
