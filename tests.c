@@ -2,6 +2,7 @@
 #include <assert.h>
 
 #include "tests.h"
+#include "lib.h"
 #include "table.h"
 
 /* OPCODE TESTS */
@@ -62,14 +63,14 @@ static int branch_not_set_test(sf_t *sf, uint8_t opcode, uint8_t flag_index) {
     sf->status |= (1 << flag_index);
     // test when flag = 1
     process_line(sf);
-    if ((sf->pc == ROM_START + offset) || sf->pc != ROM_START + 2) {
+    if (sf->pc != ROM_START + 2) {
         return -1;
     }
     sf->pc = ROM_START;
     sf->status &= (~(1 << flag_index));
     // test when flag = 0
     process_line(sf);
-    if (sf->pc != ROM_START + offset) {
+    if (sf->pc != ROM_START + offset + 2) {
         return -1;
     }
     return 0;
@@ -82,14 +83,14 @@ static int branch_set_test(sf_t *sf, uint8_t opcode, uint8_t flag_index) {
     sf->memory[ROM_START + 1] = offset;
     // test when flag = 0
     process_line(sf);
-    if ((sf->pc == ROM_START + offset) || sf->pc != ROM_START + 2) {
+    if (sf->pc != ROM_START + 2) {
         return -1;
     }
     sf->pc = ROM_START;
     sf->status |= (1 << flag_index);
     // test when flag = 1
     process_line(sf);
-    if (sf->pc != ROM_START + offset) {
+    if (sf->pc != ROM_START + offset + 2) {
         return -1;
     }
     return 0;
@@ -1690,7 +1691,7 @@ static int INC_TEST(sf_t *sf) {
 }
 
 static int run_opcode_test(sf_t *sf, int (*test_ptr)(sf_t *), char *test_name) {
-    initialize_regs(sf);
+    initialize_regs(sf, ROM_START);
 
     if ((*test_ptr)(sf) < 0) {
         printf("%s failed\n", test_name);

@@ -1,0 +1,9 @@
+	LDX #$06 	; load x_index with one value to be multiplied
+	LDY #$07 	; load y_index with other value to be multiplied
+	TYA		; transfer y_index to accumulator
+	STA $BABE	; store accumulator in predetermined address for result
+	LDA #$00	; clear accumulator
+LOOP 	ADC $BABE	; add one multiplier value with accumulator
+	DEX		; decrement x_index
+	BNE LOOP	; branch on nonzero back to add instruction
+	BRK		; break at end so we don't run over

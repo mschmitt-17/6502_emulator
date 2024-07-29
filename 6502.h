@@ -36,20 +36,6 @@
 #define OVERFLOW_INDEX      (6)
 #define NEGATIVE_INDEX      (7)
 
-/*
- * 6502 memory map according to ChatGPT:
- *      0x0000 - 0x00FF: Zero Page
- *      0x0100 - 0x01FF: Stack
- *      0x0200 - 0x07FF: System Area
- *      0x8000 - 0xBFFF: Cartridge ROM
- *      0xC000 - 0xFFFF: Cartridge RAM
- */
-#define ZERO_PAGE_START     (0x0000)
-#define STACK_START         (0x01FF)
-#define SYSTEM_START        (0x0200)
-#define ROM_START           (0x8000)
-#define RAM_START           (0xC000)
-
 /* SPECIAL CASE OPCODES (one addressing mode) */
 #define OP_BRK      (0x00) // forced interrupt
 #define OP_PHP      (0x08) // push processor status on stack
@@ -88,8 +74,6 @@
 #define OP_NOP      (0xEA) // no op
 #define OP_BEQ      (0xF0) // branch on zero flag set
 #define OP_SED      (0xF8) // set decimal mode
-
-#define OP_SKIP      (0xBB) // dummy opcode for if we wish to skip a line
 
 /* NORMAL OPCODES (multiple addressing modes) */
 #define OP_ORA      (0x01) // or memory (determined by addressing mode) with accumulator, result stored in accumulator
@@ -157,7 +141,7 @@ typedef struct sf {
 void load_bytecode(sf_t *sf, Bytecode_t *bc, uint16_t load_address, uint32_t num_bytes);
 
 /* initializes registers to all zeroes, to be called before game is run */
-void initialize_regs(sf_t *sf);
+void initialize_regs(sf_t *sf, uint16_t pc_init);
 
 /* executes one instruction (pass sf since different addressing = different bytes for instruction) */
 void process_line(sf_t *sf);

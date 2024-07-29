@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "lib.h"
 
 /* is_uppercase_letter
@@ -80,4 +83,32 @@ uint8_t char_to_hex(uint8_t curr_char) {
     } else {
         return -1;
     }
+}
+
+/* read_file
+ *      DESCRIPTION: reads passed file into buffer
+ *      INPUTS: file_path -- path to file to be read into buffer
+ *      OUTPUTS: buffer which file has been read into
+ *      SIDE EFFECTS: allocates memory for buffer which file is read into
+ */
+uint8_t *read_file(const char *file_path) {
+    FILE *fp = fopen(file_path, "r");
+
+    if (fp == NULL) {
+        fprintf(stderr, "Could not open file %s\n", file_path);
+        exit(ERR_FILE_NOOPEN);
+    }
+
+    // read to end of file to determine size of file
+    fseek(fp, 0, SEEK_END);
+    uint32_t file_size_in_bytes = ftell(fp);
+    uint8_t *sf_asm = (uint8_t *)malloc(file_size_in_bytes + 1);
+    rewind(fp);
+
+    fread(sf_asm, 1, file_size_in_bytes, fp);
+    sf_asm[file_size_in_bytes] = '\0'; // null-terminate program
+
+    fclose(fp);
+
+    return sf_asm;
 }

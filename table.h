@@ -3,11 +3,13 @@
 
 #include <stdint.h>
 
+// key-value pair for table
 typedef struct Entry {
     char *key;
     uint16_t value;
 } Entry_t;
 
+// hash table that can only be expanded
 typedef struct Table {
     Entry_t *data;
     uint32_t size;

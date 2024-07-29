@@ -5,25 +5,46 @@
 #include "lib.h"
 #include "6502.h"
 
+/* load_bytecode
+ *      DESCRIPTION: loads bytecode at passed address in memory
+ *      INPUTS: sf -- pointer to 6502 struct with memory to use
+ *              bc -- pointer to bytecode to load into memory
+ *              load_address -- address to load bytecode at
+ *              num_bytes -- number of bytes to load from start of bytecode
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: fills 6502 memory with bytecode
+ */
 void load_bytecode(sf_t *sf, Bytecode_t *bc, uint16_t load_address, uint32_t num_bytes) {
     if(load_address + num_bytes > MEMORY_SIZE) {
         fprintf(stderr, "Insufficient memory to load bytecode at address %u\n", load_address);
         exit(ERR_NO_MEM);
     }
-    memcpy(sf->memory + sf->pc, bc->start, num_bytes);
+    memcpy(sf->memory + load_address, bc->start, num_bytes);
 }
 
-// maybe change this to load_rom function since we want to reset everything when starting new game
-void initialize_regs(sf_t *sf) {
+/* initialize_regs
+ *      DESCRIPTION: sets pc to passed value, sets stack to start of stack, zeroes out other regs
+ *      INPUTS: sf -- pointer to 6502 whose registers we wish to modify
+ *              pc_init -- value to set pc to initially
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies register values
+ */
+void initialize_regs(sf_t *sf, uint16_t pc_init) {
     sf->esp = STACK_START; // stack grows down
-    sf->pc = ROM_START; // pc should begin where ROM begins
+    sf->pc = pc_init;
     sf->accumulator = 0;
     sf->x_index = 0;
     sf->y_index = 0;
     sf->status = 0;
-    memset(sf->memory, 0, MEMORY_SIZE);
 }
 
+/* check_negative_and_zero
+ *      DESCRIPTION: checks if operand is negative or zero and sets flags accordingly
+ *      INPUTS: sf -- 6502 whose flags we wish to modify
+ *              operand -- operand whose negative or zero status we want to check
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies negative and zero flag of 6502
+ */
 static void check_negative_and_zero(sf_t *sf, uint8_t operand) {
     if (operand & 0x80) {
         sf->status |= (1 << NEGATIVE_INDEX);
@@ -38,6 +59,12 @@ static void check_negative_and_zero(sf_t *sf, uint8_t operand) {
     }
 }
 
+/* hex_to_bcd
+ *      DESCRIPTION: converts passed hex number to decimal WITHOUT PRESERVING VALUE, i.e. 0x99 -> 99
+ *      INPUTS: hex -- the number to convert to decimal
+ *      OUTPUTS: the converted number
+ *      SIDE EFFECTS: none
+ */
 static uint8_t hex_to_bcd(uint8_t hex) {
     if (((hex & 0xF0) > 0x90) || ((hex & 0x0F) > 0x09)) { // if we have A-F in number we wish to convert, return error
         return 0xFF;
@@ -47,6 +74,12 @@ static uint8_t hex_to_bcd(uint8_t hex) {
     return dec;
 }
 
+/* bcd_to_hex
+ *      DESCRIPTION: converts passed bcd number to hex WITHOUT PRESERVING VALUE, i.e. 99 -> 0x99
+ *      INPUTS: dec -- the number to convert to hex
+ *      OUTPUTS: the converted number
+ *      SIDE EFFECTS: none
+ */
 static uint8_t bcd_to_hex(uint8_t dec) {
     if (dec > 99) {
         return 0xFF;
@@ -56,11 +89,25 @@ static uint8_t bcd_to_hex(uint8_t dec) {
     return hex;
 }
 
+/* ORA_operation
+ *      DESCRIPTION: ORs accumulator with operand and stores result in accumulator
+ *      INPUTS: sf -- 6502 containing accumulator to OR
+ *              operand -- operand to OR with
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies accumulator value, negative and zero flags
+ */
 static void ORA_operation(sf_t *sf, uint8_t *operand) {
     sf->accumulator |= *operand;
     check_negative_and_zero(sf, sf->accumulator);
 }
 
+/* ASL_operation
+ *      DESCRIPTION: left shifts operand, setting carry flag if MSB is set
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- operand to left shift
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: left shifts operand, sets carry flag if MSB of operand is set, modifies negative and zero flags
+ */
 static void ASL_operation(sf_t *sf, uint8_t *operand) {
     if ((*operand) & 0x80) {
         sf->status |= (1 << CARRY_INDEX);
@@ -71,6 +118,13 @@ static void ASL_operation(sf_t *sf, uint8_t *operand) {
     check_negative_and_zero(sf, *operand);
 }
 
+/* BIT_operation
+ *      DESCRIPTION: ANDs accumulator with operand, setting zero, negative, and overflow flags
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- operand to AND with accumulator
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: sets zero flag if result of AND is zero, sets negative/overflow flag if result of and has bit 7/6 set
+ */
 static void BIT_operation(sf_t *sf, uint8_t *operand) {
     if ((sf->accumulator & (*operand)) == 0x00) {
         sf->status |= (1 << ZERO_INDEX);
@@ -81,11 +135,25 @@ static void BIT_operation(sf_t *sf, uint8_t *operand) {
     sf->status |= (sf->accumulator & (*operand)) & (1 << OVERFLOW_INDEX);
 }
 
+/* AND_operation
+ *      DESCRIPTION: ANDs accumulator with operand and stores result in accumulator
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- operand to AND with accumulator
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies accumulator, negative and zero flags
+ */
 static void AND_operation(sf_t *sf, uint8_t *operand) {
     sf->accumulator &= *operand;
     check_negative_and_zero(sf, sf->accumulator);
 }
 
+/* ROL_operation
+ *      DESCRIPTION: rotates passed operand left
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- operand to rotate left
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: sets carry flag if MSB of operand is positive, modifies negative and zero flags
+ */
 static void ROL_operation(sf_t *sf, uint8_t *operand) {
     uint16_t temp = (uint16_t)(*operand); 
     temp = temp << 1;
@@ -105,11 +173,25 @@ static void ROL_operation(sf_t *sf, uint8_t *operand) {
     check_negative_and_zero(sf, *operand);
 }
 
+/* EOR_operation
+ *      DESCRIPTION: XORs accumulator with operand, storing result in accumulator
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- operand to XOR with accumulator
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies accumulator, negative and zero flags
+ */
 static void EOR_operation(sf_t *sf, uint8_t *operand) {
     sf->accumulator ^= *operand;
     check_negative_and_zero(sf, sf->accumulator);
 }
 
+/* LSR_operation
+ *      DESCRIPTION: logical shifts operand right
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- operand to logical shift
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: sets carry flag if LSB of operand is set, modifies negative and zero flags
+ */
 static void LSR_operation(sf_t *sf, uint8_t *operand) {
     if ((*operand) % 2) {
         sf->status |= (1 << CARRY_INDEX);
@@ -120,6 +202,13 @@ static void LSR_operation(sf_t *sf, uint8_t *operand) {
     check_negative_and_zero(sf, *operand);
 }
 
+/* ADC_operation
+ *      DESCRIPTION: adds operand to accumulator with carry, storing result in accumulator; works with BCD and hex
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- operand to add to accumulator
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies accumulator; overflow, negative, zero and carry flags
+ */
 static void ADC_operation(sf_t *sf, uint8_t *operand) {
     if (sf->status & (1 << DECIMAL_INDEX)) {
         uint8_t temp = hex_to_bcd(sf->accumulator) + hex_to_bcd(*operand) + ((sf->status & (1 << CARRY_INDEX)) >> (CARRY_INDEX));
@@ -167,6 +256,13 @@ static void ADC_operation(sf_t *sf, uint8_t *operand) {
     check_negative_and_zero(sf, sf->accumulator);
 }
 
+/* ROR_operation
+ *      DESCRIPTION: rotates operand right
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- operand to rotate right
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: sets carry flag if LSB of operand is set, modifies negative and zero flags
+ */
 static void ROR_operation(sf_t *sf, uint8_t *operand) {
     uint8_t temp = (*operand) >> 1;
     if (sf->status & (1 << CARRY_INDEX)) {
@@ -178,80 +274,86 @@ static void ROR_operation(sf_t *sf, uint8_t *operand) {
         sf->status &= ~(1 << CARRY_INDEX);
     }
     *operand = temp;
-    
-    if ((*operand) & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
-    }
 
-    if ((*operand) == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, *operand);
 }
 
+/* STY_operation
+ *      DESCRIPTION: stores y_index in memory
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory where location to store y_index is
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: none
+ */
 static void STY_operation(sf_t *sf, uint8_t *operand) {
     *operand = sf->y_index;
 }
 
+/* STA_operation
+ *      DESCRIPTION: stores accumulator in memory
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory where location to store accumulator is
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: none
+ */
 static void STA_operation(sf_t *sf, uint8_t *operand) {
     *operand = sf->accumulator;
 }
 
+/* STX_operation
+ *      DESCRIPTION: stores x_index in memory
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory where location to store x_index is
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: none
+ */
 static void STX_operation(sf_t *sf, uint8_t *operand) {
     *operand = sf->x_index;
 }
 
+/* LDY_operation
+ *      DESCRIPTION: loads y_index with memory
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory where value to store in y_index is
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies negative, zero flags according to y_index
+ */
 static void LDY_operation(sf_t *sf, uint8_t *operand) {
     sf->y_index = *operand;
-    
-    if (sf->y_index & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
-    }
-
-    if (sf->y_index == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, sf->y_index);
 }
 
+/* LDA_operation
+ *      DESCRIPTION: loads accumulator with memory
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory where value to store in accumulator is
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: none
+ */
 static void LDA_operation(sf_t *sf, uint8_t *operand) {
     sf->accumulator = *operand;
-    
-    if (sf->accumulator & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
-    }
-
-    if (sf->accumulator == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, sf->accumulator);
 }
 
+/* LDX_operation
+ *      DESCRIPTION: loads x_index with memory
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory where value to store in x_index is
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: none
+ */
 static void LDX_operation(sf_t *sf, uint8_t *operand) {
     sf->x_index = *operand;
-    
-    if (sf->x_index & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
-    }
-
-    if (sf->x_index == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, sf->x_index);
 }
 
+/* open_bytecode
+ *      DESCRIPTION: compare memory and y_index
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory to compare to y_index
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: sets carry, zero, and negative flags according to comparison result
+ */
 static void CPY_operation(sf_t *sf, uint8_t *operand) {
     if (sf->y_index < *operand) {
         sf->status |= (1 << CARRY_INDEX);
@@ -260,19 +362,16 @@ static void CPY_operation(sf_t *sf, uint8_t *operand) {
     }
     uint8_t temp = sf->y_index - *operand;
 
-    if (temp & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
-    }
-
-    if (temp == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, temp);
 }
 
+/* CMP_operation
+ *      DESCRIPTION: compare memory and accumulator
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory to compare to accumulator
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: none
+ */
 static void CMP_operation(sf_t *sf, uint8_t *operand) {
     if (sf->accumulator < *operand) {
         sf->status |= (1 << CARRY_INDEX);
@@ -281,35 +380,28 @@ static void CMP_operation(sf_t *sf, uint8_t *operand) {
     }
     uint8_t temp = sf->accumulator - *operand;
 
-    if (temp & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
-    }
-
-    if (temp == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, temp);
 }
 
+/* DEC_operation
+ *      DESCRIPTION: decrements memory
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory with value to decrement
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies negative and zero flags
+ */
 static void DEC_operation(sf_t *sf, uint8_t *operand) {
     *operand -= 1;
-                            
-    if ((*operand) & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
-    }
-
-    if ((*operand) == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, *operand);
 }
 
+/* CPX_operation
+ *      DESCRIPTION: compare memory and x_index
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory to compare to x_index
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies carry, negative, and zero flags
+ */
 static void CPX_operation(sf_t *sf, uint8_t *operand) {
     if (sf->x_index < *operand) {
         sf->status |= (1 << CARRY_INDEX);
@@ -318,19 +410,16 @@ static void CPX_operation(sf_t *sf, uint8_t *operand) {
     }
     uint8_t temp = sf->x_index - *operand;
 
-    if (temp & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
-    }
-
-    if (temp == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, temp);
 }
 
+/* SBC_operation
+ *      DESCRIPTION: subtracts memory from accumulator (with carry) and stores the result in accumulator, expects carry to be set for normal operation
+ *      INPUTS: sf -- 6502 stryuct
+ *              operand -- memory with value to subtract from accumulator
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies accumulator; carry, overflow, negative, and zero flags
+ */
 static void SBC_operation(sf_t *sf, uint8_t *operand) {
     if (sf->status & (1 << DECIMAL_INDEX)) {
         uint8_t temp;
@@ -381,24 +470,24 @@ static void SBC_operation(sf_t *sf, uint8_t *operand) {
     check_negative_and_zero(sf, sf->accumulator);
 }
 
+/* INC_operation
+ *      DESCRIPTION: increments memory
+ *      INPUTS: sf -- 6502 struct
+ *              operand -- memory with value to increment
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: modifies negative, zero flags
+ */
 static void INC_operation(sf_t *sf, uint8_t *operand) {
     *operand += 1;
-
-    if ((*operand) & 0x80) {
-        sf->status |= (1 << NEGATIVE_INDEX);
-    } else {
-        sf->status &= ~(1 << NEGATIVE_INDEX);
-    }
-
-    if ((*operand) == 0x00) {
-        sf->status |= (1 << ZERO_INDEX);
-    } else {
-        sf->status &= ~(1 << ZERO_INDEX);
-    }
+    check_negative_and_zero(sf, *operand);
 }
 
-// since number of bytes needed will vary based on operation and addressing mode,
-// process data "line-by-line" instead of opcode-by-opcode
+/* process_line
+ *      DESCRIPTION: runs line of bytecode beginning at location of PC
+ *      INPUTS: sf -- 6502 struct
+ *      OUTPUTS: none
+ *      SIDE EFFECTS: may modify status, accumulator, x_index, y_index, and pc depending on instruction
+ */
 void process_line (sf_t *sf) {
     switch (sf->memory[sf->pc]) { 
         case OP_BRK:
@@ -416,10 +505,9 @@ void process_line (sf_t *sf) {
             break;
         
         case OP_BPL:
+            sf->pc += 2;
             if (!(sf->status & (1 << NEGATIVE_INDEX))) {
-                sf->pc += (int8_t) sf->memory[sf->pc + 1]; // offset is stored in following byte
-            } else {
-                sf->pc += 2; // skip offset
+                sf->pc += (int8_t) sf->memory[sf->pc - 1]; // offset is stored in previous byte
             }
             break;
         
@@ -442,10 +530,9 @@ void process_line (sf_t *sf) {
             break;
 
         case OP_BMI:
+            sf->pc += 2;
             if (sf->status & (1 << NEGATIVE_INDEX)) {
-                sf->pc += (int8_t)sf->memory[sf->pc + 1];
-            } else {
-                sf->pc += 2;
+                sf->pc += (int8_t)sf->memory[sf->pc - 1];
             }
             break;
 
@@ -471,10 +558,9 @@ void process_line (sf_t *sf) {
             break;
 
         case OP_BVC:
+            sf->pc += 2;
             if (!(sf->status & (1 << OVERFLOW_INDEX))) {
-                sf->pc += (int8_t)sf->memory[sf->pc + 1];
-            } else {
-                sf->pc += 2;
+                sf->pc += (int8_t)sf->memory[sf->pc - 1];
             }
             break;
 
@@ -500,10 +586,9 @@ void process_line (sf_t *sf) {
             break;
 
         case OP_BVS:
+            sf->pc += 2;
             if (sf->status & (1 << OVERFLOW_INDEX)) {
-                sf->pc += (int8_t)sf->memory[sf->pc + 1];
-            } else {
-                sf->pc += 2;
+                sf->pc += (int8_t)sf->memory[sf->pc - 1];
             }
             break;
 
@@ -525,10 +610,9 @@ void process_line (sf_t *sf) {
             break;
 
         case OP_BCC:
+            sf->pc += 2;
             if (!(sf->status & (1 << CARRY_INDEX))) {
-                sf->pc += (int8_t)sf->memory[sf->pc + 1];
-            } else {
-                sf->pc += 2;
+                sf->pc += (int8_t)sf->memory[sf->pc - 1];
             }
             break;
 
@@ -556,10 +640,9 @@ void process_line (sf_t *sf) {
             break;
 
         case OP_BCS:
+            sf->pc += 2;
             if (sf->status & (1 << CARRY_INDEX)) {
-                sf->pc += (int8_t)sf->memory[sf->pc + 1];
-            } else {
-                sf->pc += 2;
+                sf->pc += (int8_t)sf->memory[sf->pc - 1];
             }
             break;
 
@@ -587,10 +670,9 @@ void process_line (sf_t *sf) {
             break;
 
         case OP_BNE:
+            sf->pc += 2;
             if (!(sf->status & (1 << ZERO_INDEX))) {
-                sf->pc += (int8_t)sf->memory[sf->pc + 1];
-            } else {
-                sf->pc += 2;
+                sf->pc += (int8_t)sf->memory[sf->pc - 1];
             }
             break;
 
@@ -610,10 +692,9 @@ void process_line (sf_t *sf) {
             break;
 
         case OP_BEQ:
+            sf->pc += 2;
             if (sf->status & (1 << ZERO_INDEX)) {
-                sf->pc += (int8_t)sf->memory[sf->pc + 1];
-            } else {
-                sf->pc += 2;
+                sf->pc += (int8_t)sf->memory[sf->pc - 1];
             }
             break;
 

@@ -5,7 +5,8 @@
 #define DIRECTIVE_ERROR 0xFF
 
 #include "token.h"
+#include "table.h"
 
-Clip_t *assembly_to_clip(const char *file_path);
+Clip_t *assembly_to_clip(uint8_t *sf_asm, Table_t **label_table_dbl_ptr);
 
 #endif

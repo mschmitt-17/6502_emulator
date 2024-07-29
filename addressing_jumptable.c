@@ -1,6 +1,13 @@
 #include "addressing_jumptable.h"
 #include "6502.h"
 
+/* implied_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for implied addressing
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode if valid pair, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int implied_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_IMP) {
         return opcode;
@@ -8,6 +15,13 @@ static int implied_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* standard_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for "standard" addressing (all 8 valid)
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode with proper addressing mode if valid pair, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int standard_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_IND_X ||
         addressing_mode == ADDR_MODE_ZPG ||
@@ -22,25 +36,46 @@ static int standard_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* accum_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for accumulator addressing
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode with proper addressing mode if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int accum_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_ZPG ||
         addressing_mode == ADDR_MODE_ABS ||
         addressing_mode == ADDR_MODE_ZPG_X ||
         addressing_mode == ADDR_MODE_ABS_X) {
         return opcode | (addressing_mode << 2);
-    } else if (addressing_mode == ADDR_MODE_ACCUM_PARSE) {
+    } else if (addressing_mode == ADDR_MODE_ACCUM_GEN) {
         return opcode | (ADDR_MODE_ACCUM << 2);
     }
     return -1;
 }
 
+/* relative_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for relative addressing (addressing mode for branch instructions)
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int relative_addressing(uint8_t opcode, uint8_t addressing_mode) {
-    if (addressing_mode == ADDR_MODE_ZPG) { // ZPG and relative addressing are syntactically the same
+    if (addressing_mode == ADDR_MODE_ABS) { // ABS and relative addressing are syntactically the same
         return opcode;
     }
     return -1;
 }
 
+/* JSR_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for JSR instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: OP_JSR if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int JSR_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_ABS) {
         return OP_JSR;
@@ -48,6 +83,13 @@ static int JSR_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* BIT_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for BIT instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: OP_BIT with passed addressing mode if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int BIT_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_ZPG ||
         addressing_mode == ADDR_MODE_ABS) {
@@ -56,6 +98,13 @@ static int BIT_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* JMP_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for JMP instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: OP_JI or OP_JMP if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int JMP_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_IND) {
         return OP_JI;
@@ -65,6 +114,13 @@ static int JMP_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* STY_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for STY instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode with passed addressing mode if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int STY_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_ZPG ||
         addressing_mode == ADDR_MODE_ABS ||
@@ -74,6 +130,13 @@ static int STY_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* STA_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for STA instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode with passed addressing mode if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int STA_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_IND_X ||
         addressing_mode == ADDR_MODE_ZPG ||
@@ -87,16 +150,30 @@ static int STA_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* STX_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for STX instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode with passed addressing mode if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int STX_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_ZPG ||
         addressing_mode == ADDR_MODE_ABS) {
         return opcode | (addressing_mode << 2);
-    } else if (addressing_mode == ADDR_MODE_ZPG_Y_PARSE) {
+    } else if (addressing_mode == ADDR_MODE_ZPG_Y_GEN) {
         return opcode | (ADDR_MODE_ZPG_Y << 2);
     }
     return -1;
 }
 
+/* LDY_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for LDY instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode with passed addressing mode/OP_LDY if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int LDY_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_ZPG ||
         addressing_mode == ADDR_MODE_ABS ||
@@ -108,18 +185,32 @@ static int LDY_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* JSR_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for LDX instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode with passed addressing mode/OP_LDX if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int LDX_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_ZPG ||
         addressing_mode == ADDR_MODE_ABS) {
         return opcode | (addressing_mode << 2);
     } else if (addressing_mode == ADDR_MODE_IMM) {
         return OP_LDX;
-    } else if (addressing_mode == ADDR_MODE_ZPG_Y_PARSE) {
+    } else if (addressing_mode == ADDR_MODE_ZPG_Y_GEN) {
         return opcode | (ADDR_MODE_ZPG_Y << 2);
     }
     return -1;
 }
 
+/* CPX_CPY_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for CPX/CPY instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode with passed addressing mode if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int CPX_CPY_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_ZPG ||
         addressing_mode == ADDR_MODE_ABS) {
@@ -130,6 +221,13 @@ static int CPX_CPY_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* DEC_INC_addressing
+ *      DESCRIPTION: validates opcode-addressing mode pair for DEC/INC instruction
+ *      INPUTS: opcode -- opcode to validate
+ *              addressing mode -- addressing mode to validate
+ *      OUTPUTS: opcode with passed addressing mdoe if valid, -1 otherwise
+ *      SIDE EFFECTS: none
+ */
 static int DEC_INC_addressing(uint8_t opcode, uint8_t addressing_mode) {
     if (addressing_mode == ADDR_MODE_ZPG ||
         addressing_mode == ADDR_MODE_ABS ||
@@ -140,6 +238,13 @@ static int DEC_INC_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
 
+/* invalid_addressing
+ *      DESCRIPTION: placeholder function in jumptable for invalid instructions
+ *      INPUTS: opcode -- placeholder
+ *              addressing mode -- placeholder
+ *      OUTPUTS: -1
+ *      SIDE EFFECTS: none
+ */
 static int invalid_addressing(uint8_t opcode, uint8_t addressing_mode) {
     return -1;
 }
