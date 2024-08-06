@@ -331,131 +331,213 @@ static uint8_t determine_opcode(uint8_t *curr_char_ptr) {
     return INVALID_OPCODE; // placeholder invalid opcode
 }
 
+/* is_branch_instruction
+ *      DESCRIPTION: determines if passed instruction is a branch instruction
+ *      INPUTS: opcode -- opcode of instruction we want to check
+ *      OUTPUTS: 1 if instruction is branch instruction, 0 otherwise
+ *      SIDE EFFECTS: none
+ */
+static uint8_t is_branch_instruction(uint8_t opcode) {
+    if (opcode == OP_BPL ||
+        opcode == OP_BMI ||
+        opcode == OP_BVC ||
+        opcode == OP_BVS ||
+        opcode == OP_BCC ||
+        opcode == OP_BCS ||
+        opcode == OP_BNE ||
+        opcode == OP_BEQ) {
+        return 1;
+    }
+    return 0;
+}
+
+/* chars_until_delimiter
+ *      DESCRIPTION: used to determine how many characters are in operand until delimiter (allows us to determine boundaries of label)
+ *      INPUTS: operand_string -- string of operand we wish to find index of delimiter in
+ *      OUTPUTS: number of characters in string until delimiter
+ *      SIDE EFFECTS: none
+ */
+static uint8_t chars_until_delimiter(char *operand_string) {
+    int i = 0;
+    for (i; i < strlen(operand_string); i++) {
+        if (operand_string[i] == ',' || operand_string[i] == ')' || // when label is used with indirect addressing mode or x/y-indexed addressing mode
+            operand_string[i] == ' ' || operand_string[i] == '\n' || operand_string[i] == '\0' || operand_string[i] == ';') { // when label is used with absolute addressing mode
+            break;
+        }
+    }
+    return i;
+}
+
 /* determine_operand_and_addressing
  *      DESCRIPTION: determines operand and addressing mode based on operand
- *      INPUTS: curr_char_ptr -- pointer to starting character of operand token
- *              token_len -- length of operand token
- *              return_buf -- buffer with at least 3 bytes of allocated memory
+ *      INPUTS: sf_asm -- pointer to assembly being converted to bytecode
+ *              operand_token -- token for operand which we are processing
+ *              return_buf -- buffer with at least 4 bytes of allocated memory
+ *              label_table_dbl_ptr -- double pointer to label table
  *      OUTPUTS: none
- *      SIDE EFFECTS: fills return_buf with return_buf[0] = addressing mode, return_buf[1] = low byte of operand, return_buf[2] = high byte of operand
+ *      SIDE EFFECTS: fills return_buf with return_buf[3] = addressing mode, return_buf[1] = low byte of operand, return_buf[2] = high byte of operand
  */
-static void determine_operand_and_addressing(uint8_t *curr_char_ptr, uint8_t token_len, uint8_t *return_buf) {
-    switch (token_len) {
-        case 1:
-            // OPC A -- accumulator addressing mode
-            if (*curr_char_ptr == 'A' || *curr_char_ptr == 'a') {
-                return_buf[0] = ADDR_MODE_ACCUM_GEN;
+static uint8_t determine_operand_and_addressing(uint8_t *sf_asm, Token_t operand_token, uint8_t *return_buf, Table_t **label_table_dbl_ptr) {
+    char *operand_string = calloc(operand_token.end_index - operand_token.start_index + 2, 1);
+    memcpy(operand_string, sf_asm + operand_token.start_index, operand_token.end_index - operand_token.start_index + 1);
+    switch (operand_string[0]) {
+        case 'A':
+        case 'a':
+            if (strlen(operand_string) == 1) {
+                // OPC A -- Accumulator Addressing Mode
+                return_buf[3] = ADDR_MODE_ACCUM_GEN;
             }
             break;
-        case 3:
-            // OPC $LL -- zero-page addressing mode
-            if (*curr_char_ptr == '$') {
-                if (is_hex_number(*(curr_char_ptr + 1))) {
-                    if (is_hex_number(*(curr_char_ptr + 2))) {
-                        return_buf[0] = ADDR_MODE_ZPG;
-                        return_buf[1] = (char_to_hex(*(curr_char_ptr + 1)) << 4) | char_to_hex(*(curr_char_ptr + 2));
+        case '#':
+            if (strlen(operand_string) == 4 &&
+                operand_string[1] == '$' &&
+                is_hex_number(operand_string[2]) &&
+                is_hex_number(operand_string[3])) {
+                // OPC #$BB -- Immediate Addressing Mode
+                return_buf[3] = ADDR_MODE_IMM;
+                return_buf[1] = ((char_to_hex(operand_string[2]) << 4) | char_to_hex(operand_string[3]));
+            }
+            break;
+        case '$':
+            if (strlen(operand_string) == 3 &&
+                is_hex_number(operand_string[1]) &&
+                is_hex_number(operand_string[2])) {
+                // OPC $LL -- Zero Page Addressing Mode
+                return_buf[3] = ADDR_MODE_ZPG;
+                return_buf[1] = (char_to_hex(operand_string[1]) << 4) | char_to_hex(operand_string[2]);
+            } else if (strlen(operand_string) == 5 &&
+                        is_hex_number(operand_string[1]) &&
+                        is_hex_number(operand_string[2])) {
+                if (is_hex_number(operand_string[3]) && is_hex_number(operand_string[4])) {
+                    // OPC $HHLL -- Absolute Addressing Mode
+                    return_buf[3] = ADDR_MODE_ABS;
+                    return_buf[1] = (char_to_hex(operand_string[3]) << 4) | char_to_hex(operand_string[4]);
+                    return_buf[2] = (char_to_hex(operand_string[1]) << 4) | char_to_hex(operand_string[2]);
+                } else if (operand_string[3] == ',') {
+                    if ((operand_string[4] == 'X' || operand_string[4] == 'x')) {
+                        // OPC $LL,X -- Zero Page X-Indexed Addressing Mode
+                        return_buf[3] = ADDR_MODE_ZPG_X;
+                        return_buf[1] = (char_to_hex(operand_string[2]) << 4) | char_to_hex(operand_string[3]);
+                    } else if ((operand_string[4] == 'Y' || operand_string[4] == 'y')) {
+                        // OPC $LL,Y -- Zero-Page Y-Indexed Addressing Mode
+                        return_buf[3] = ADDR_MODE_ZPG_Y;
+                        return_buf[1] = (char_to_hex(operand_string[2]) << 4) | char_to_hex(operand_string[3]);
                     }
+                }
+            } else if (strlen(operand_string) == 7 &&
+                        is_hex_number(operand_string[1]) &&
+                        is_hex_number(operand_string[2]) &&
+                        is_hex_number(operand_string[3]) &&
+                        is_hex_number(operand_string[4]) &&
+                        operand_string[5] == ',') {
+                if (operand_string[6] == 'X' || operand_string[6] == 'x') {
+                    // OPC $HHLL,X -- Absolute X-Indexed Addressing Mode
+                    return_buf[3] = ADDR_MODE_ABS_X;
+                    return_buf[1] = (char_to_hex(operand_string[3]) << 4) | char_to_hex(operand_string[4]);
+                    return_buf[2] = (char_to_hex(operand_string[1]) << 4) | char_to_hex(operand_string[2]);
+                } else if (operand_string[6] == 'Y' || operand_string[6] == 'y') {
+                    // OPC $HHLL,Y -- Absolute Y-Indexed Addressing Mode
+                    return_buf[3] = ADDR_MODE_ABS_Y;
+                    return_buf[1] = (char_to_hex(operand_string[3]) << 4) | char_to_hex(operand_string[4]);
+                    return_buf[2] = (char_to_hex(operand_string[1]) << 4) | char_to_hex(operand_string[2]);
                 }
             }
             break;
-        case 4:
-            // OPC #$BB -- immediate addressing mode
-            if (*curr_char_ptr == '#') {
-                if (*(curr_char_ptr + 1) == '$') {
-                    if (is_hex_number(*(curr_char_ptr + 2))) {
-                        if (is_hex_number(*(curr_char_ptr + 3))) {
-                            return_buf[0] = ADDR_MODE_IMM;
-                            return_buf[1] = (char_to_hex(*(curr_char_ptr + 2)) << 4) | char_to_hex(*(curr_char_ptr + 3));
+        case '(':
+            if (operand_string[1] == '$' &&
+                is_hex_number(operand_string[2]) &&
+                is_hex_number(operand_string[3])) {
+                if (is_hex_number(operand_string[4]) &&
+                    is_hex_number(operand_string[5]) &&
+                    operand_string[6] == ')') {
+                    // OPC ($HHLL) -- Indirect Addressing Mode
+                    return_buf[3] = ADDR_MODE_IND;
+                    return_buf[1] = (char_to_hex(operand_string[4]) << 4) | char_to_hex(operand_string[5]);
+                    return_buf[2] = (char_to_hex(operand_string[2]) << 4) | char_to_hex(operand_string[3]);
+                } else if (operand_string[4] == ',' &&
+                            (operand_string[5] == 'X' || operand_string[5] == 'x') &&
+                            operand_string[6] == ')') {
+                    // OPC ($LL,X) -- Indirect X-Indexed Addressing Mode
+                    return_buf[3] = ADDR_MODE_IND_X;
+                    return_buf[1] = (char_to_hex(operand_string[2]) << 4) | char_to_hex(operand_string[3]);
+                } else if (operand_string[4] == ')' &&
+                            operand_string[5] == ',' &&
+                            (operand_string[6] == 'Y' || operand_string[6] == 'y')) {
+                    // OPC ($LL),Y -- Indirect Y-Indexed Addressing Mode
+                    return_buf[3] = ADDR_MODE_IND_Y;
+                    return_buf[1] = (char_to_hex(operand_string[2]) << 4) | char_to_hex(operand_string[3]);
+                }
+            } else {
+                uint8_t label_end_index = chars_until_delimiter(operand_string);
+                if (validate_label(operand_string + 1, label_end_index - 1)) {
+                    char label_str[label_end_index];
+                    memset(label_str, 0, label_end_index);
+                    memcpy(label_str, operand_string + 1, label_end_index - 1);
+                    uint32_t operand = get_value(*label_table_dbl_ptr, label_str);
+                    if (operand == -1) {
+                        fprintf(stderr, "Error at line %d: invalid label\n", operand_token.line_num);
+                        exit(ERR_INVALID_LABEL);
+                    }
+                    
+                    if (strlen(operand_string) == label_end_index + 1 && operand_string[label_end_index] == ')') {
+                        // OPC (LABEL) -- Indirect Addressing Mode
+                        return_buf[3] = ADDR_MODE_IND;
+                        return_buf[1] = operand & (0x000000FF);
+                        return_buf[2] = (operand & (0x0000FF00)) >> 8;
+                    } else if (strlen(operand_string) == label_end_index + 3) {
+                        if (operand > 0x000000FF) {
+                            fprintf(stderr, "Error at line %d: label corresponds to non zero-page address\n", operand_token.line_num);
+                            exit(ERR_LABEL_ADDRESSING);
                         }
-                    }
-                }
-            }
-            break;
-        case 5:
-            if (*curr_char_ptr == '$') {
-                if (is_hex_number(*(curr_char_ptr + 1))) {
-                    if (is_hex_number(*(curr_char_ptr + 2))) {
-                        if (is_hex_number(*(curr_char_ptr + 3))) {
-                            if (is_hex_number(*(curr_char_ptr + 4))) {
-                                // OPC $HHLL -- absolute addressing mode
-                                return_buf[0] = ADDR_MODE_ABS;
-                                return_buf[1] = (char_to_hex(*(curr_char_ptr + 3)) << 4) | char_to_hex(*(curr_char_ptr + 4));
-                                return_buf[2] = (char_to_hex(*(curr_char_ptr + 1)) << 4) | char_to_hex(*(curr_char_ptr + 2));
-                            }
-                        } else if (*(curr_char_ptr + 3) == ',') {
-                            if (*(curr_char_ptr + 4) == 'X' || *(curr_char_ptr + 4) == 'x') {
-                                // OPC $LL,X -- zero-page x-indexed addressing mode
-                                return_buf[0] = ADDR_MODE_ZPG_X;
-                                return_buf[1] = (char_to_hex(*(curr_char_ptr + 1)) << 4) | char_to_hex(*(curr_char_ptr + 2));
-                            } else if (*(curr_char_ptr + 4) == 'Y' || *(curr_char_ptr + 4) == 'y') {
-                                // OPC $LL,Y -- zero-page y-indexed addressing mode
-                                return_buf[0] = ADDR_MODE_ZPG_Y;
-                                return_buf[1] = (char_to_hex(*(curr_char_ptr + 1)) << 4) | char_to_hex(*(curr_char_ptr + 2));
-                            }
-                        }
-                    }
-                }
-            }
-            break;
-        case 7:
-            if (*curr_char_ptr == '(') {
-                if (*(curr_char_ptr + 1) == '$') {
-                    if (is_hex_number(*(curr_char_ptr + 2))) {
-                        if (is_hex_number(*(curr_char_ptr + 3))) {
-                            if (is_hex_number(*(curr_char_ptr + 4))) {
-                                if (is_hex_number(*(curr_char_ptr + 5))) {
-                                    if (*(curr_char_ptr + 6) == ')') {
-                                        //OPC ($HHLL) -- indirect addressing mode (branch only)
-                                        return_buf[0] = ADDR_MODE_IND;
-                                        return_buf[1] = (char_to_hex(*(curr_char_ptr + 4)) << 4) | char_to_hex(*(curr_char_ptr + 5));
-                                        return_buf[2] = (char_to_hex(*(curr_char_ptr + 2)) << 4) | char_to_hex(*(curr_char_ptr + 3));
-                                    }
-                                }
-                            } else if (*(curr_char_ptr + 4) == ',') {
-                                if (*(curr_char_ptr + 5) == 'X') {
-                                    if (*(curr_char_ptr + 6) == ')') {
-                                        // OPC ($LL,X) -- indirect x-indexed addressing mode
-                                        return_buf[0] = ADDR_MODE_IND_X;
-                                        return_buf[1] = (char_to_hex(*(curr_char_ptr + 2)) << 4) | char_to_hex(*(curr_char_ptr + 3));
-                                    }
-                                }
-                            } else if (*(curr_char_ptr + 4) == ')') {
-                                if (*(curr_char_ptr + 5) == ',') {
-                                    if (*(curr_char_ptr + 6) == 'Y') {
-                                        // OPC ($LL),Y -- indirect y-indexed addressing mode
-                                        return_buf[0] = ADDR_MODE_IND_Y;
-                                        return_buf[1] = (char_to_hex(*(curr_char_ptr + 2)) << 4) | char_to_hex(*(curr_char_ptr + 3));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } else if (*curr_char_ptr == '$') {
-                if (is_hex_number(*(curr_char_ptr + 1))) {
-                    if (is_hex_number(*(curr_char_ptr + 2))) {
-                        if (is_hex_number(*(curr_char_ptr + 3))) {
-                            if (is_hex_number(*(curr_char_ptr + 4))) {
-                                if (*(curr_char_ptr + 5) == ',') {
-                                    if (*(curr_char_ptr + 6) == 'X' || *(curr_char_ptr + 6) == 'x') {
-                                        // OPC $HHLL,X -- absolute x-indexed addressing mode
-                                        return_buf[0] = ADDR_MODE_ABS_X;
-                                        return_buf[1] = (char_to_hex(*(curr_char_ptr + 3)) << 4) | char_to_hex(*(curr_char_ptr + 4));
-                                        return_buf[2] = (char_to_hex(*(curr_char_ptr + 1)) << 4) | char_to_hex(*(curr_char_ptr + 2));
-                                    } else if (*(curr_char_ptr + 6) == 'Y' || *(curr_char_ptr + 6) == 'y') {
-                                        // OPC $HHLL,Y -- absolute x-indexed addressing mode
-                                        return_buf[0] = ADDR_MODE_ABS_Y;
-                                        return_buf[1] = (char_to_hex(*(curr_char_ptr + 3)) << 4) | char_to_hex(*(curr_char_ptr + 4));
-                                        return_buf[2] = (char_to_hex(*(curr_char_ptr + 1)) << 4) | char_to_hex(*(curr_char_ptr + 2));
-                                    }
-                                }
-                            }
+
+                        if (operand_string[label_end_index] == ',' &&
+                            (operand_string[label_end_index + 1] == 'X' || operand_string[label_end_index + 1] == 'x') &&
+                            operand_string[label_end_index + 2] == ')') {
+                            // OPC (LABEL,X) -- Indirect X-Indexed Addressing Mode
+                            return_buf[3] = ADDR_MODE_IND_X;
+                            return_buf[1] = operand & (0x000000FF);
+                        } else if (operand_string[label_end_index] == ')' &&
+                                    operand_string[label_end_index + 1] == ',' &&
+                                    (operand_string[label_end_index + 2] == 'Y' || operand_string[label_end_index + 2] == 'y')) {
+                            // OPC (LABEL),Y -- Indirect Y-Indexed Addressing Mode
+                            return_buf[3] = ADDR_MODE_IND_Y;
+                            return_buf[1] = operand & (0x000000FF);
                         }
                     }
                 }
             }
             break;
         default:
+            uint32_t label_end_index = chars_until_delimiter(operand_string);
+            if (validate_label(operand_string, label_end_index)) {
+                char label_str[label_end_index + 1];
+                memset(label_str, 0, label_end_index + 1);
+                memcpy(label_str, operand_string, label_end_index);
+                uint32_t operand = get_value(*label_table_dbl_ptr, label_str);
+                if (operand == -1) {
+                    fprintf(stderr, "Error at line %d: invalid label\n", operand_token.line_num);
+                    exit(ERR_INVALID_LABEL);
+                }
+                
+                if (strlen(operand_string) == label_end_index) {
+                    // OPC LABEL -- Relative/Absolute Addressing Mode
+                    return_buf[3] = ADDR_MODE_REL;
+                    return_buf[1] = operand & (0x000000FF);
+                    return_buf[2] = (operand & (0x0000FF00)) >> 8;
+                } else if (strlen(operand_string) == label_end_index + 2 && operand_string[label_end_index] == ',') {
+                    if (operand_string[label_end_index + 1] == 'X' || operand_string[label_end_index + 1] == 'x') {
+                        // OPC LABEL,X -- Absolute X-Indexed Addressing Mode
+                        return_buf[3] = ADDR_MODE_ABS_X;
+                        return_buf[1] = operand & (0x000000FF);
+                        return_buf[2] = (operand & (0x0000FF00)) >> 8;
+                    } else if (operand_string[label_end_index + 1] == 'Y' || operand_string[label_end_index + 1] == 'y') {
+                        // OPC LABEL,Y -- Absolute Y-Indexed Addressing Mode
+                        return_buf[3] = ADDR_MODE_ABS_Y;
+                        return_buf[1] = operand & (0x000000FF);
+                        return_buf[2] = (operand & (0x0000FF00)) >> 8;
+                    }
+                }
+            }
             break;
     }
 }
@@ -478,28 +560,6 @@ static void generate_line(Bytecode_t *bc, uint8_t *sf_asm, Token_t **curr_token_
 
     while ((*curr_token_dbl_ptr)->type != TOKEN_END && (*curr_token_dbl_ptr)->line_num == curr_line) {
         switch ((*curr_token_dbl_ptr)->type) {
-            case TOKEN_LABEL:
-                char *label_str = (char *)malloc((*curr_token_dbl_ptr)->end_index - (*curr_token_dbl_ptr)->start_index + 2);
-                memset(label_str, '\0', (*curr_token_dbl_ptr)->end_index - (*curr_token_dbl_ptr)->start_index + 2);
-                memcpy(label_str, sf_asm + (*curr_token_dbl_ptr)->start_index, (*curr_token_dbl_ptr)->end_index - (*curr_token_dbl_ptr)->start_index + 1);
-                    if (return_buf[0] != ADDR_MODE_IMP) {
-                        fprintf(stderr, "Syntax error at line %d: can't have operand and label referenced on same line\n", (*curr_token_dbl_ptr)->line_num);
-                        exit(ERR_SYNTAX);
-                    }
-                    return_buf[0] = ADDR_MODE_ABS; // relative addressing is syntactically the same as absolute addressing
-
-                    // if offset will overflow beyond -128 or 127, error out
-                    if (((get_value(*label_table_dbl_ptr, label_str) > (bc->load_address + bc->index + 1)) &&
-                         (get_value(*label_table_dbl_ptr, label_str) - (bc->load_address + bc->index + 1)) > 0x7F) || 
-                        ((get_value(*label_table_dbl_ptr, label_str) < (bc->load_address + bc->index + 1)) &&
-                         ((bc->load_address + bc->index + 1) - get_value(*label_table_dbl_ptr, label_str)) > 0x80)) {
-                        fprintf(stderr, "Error at line %d: branch offsets may be at most -128 or 127 bytes away\n", (*curr_token_dbl_ptr)->line_num);
-                        exit(ERR_OVERFLOW);
-                    }
-
-                    return_buf[1] = get_value(*label_table_dbl_ptr, label_str) - (bc->load_address + bc->index + 2); // bc->start + bc->index + 2 = previously filled entries plus where pc will be after running INST LABEL line
-                free(label_str);
-                break;
             case TOKEN_INSTRUCTION:
                 if (opcode != INVALID_OPCODE) {
                     fprintf(stderr, "Syntax error at line %d: can't have two instructions in one line\n", (*curr_token_dbl_ptr)->line_num);
@@ -512,12 +572,12 @@ static void generate_line(Bytecode_t *bc, uint8_t *sf_asm, Token_t **curr_token_
                 }
                 break;
             case TOKEN_OPERAND:
-                if (return_buf[0] != ADDR_MODE_IMP) {
+                if (return_buf[3] != ADDR_MODE_IMP) {
                     fprintf(stderr, "Syntax error at line %d: can't have two operands in one line\n", (*curr_token_dbl_ptr)->line_num);
                     exit(ERR_SYNTAX);
                 }
-                determine_operand_and_addressing(sf_asm + (*curr_token_dbl_ptr)->start_index, (*curr_token_dbl_ptr)->end_index - (*curr_token_dbl_ptr)->start_index + 1, return_buf);
-                if (return_buf[0] == ADDR_MODE_IMP) {
+                determine_operand_and_addressing(sf_asm, **curr_token_dbl_ptr, return_buf, label_table_dbl_ptr);
+                if (return_buf[3] == ADDR_MODE_IMP) {
                     fprintf(stderr, "Invalid operand at line %d\n", (*curr_token_dbl_ptr)->line_num);
                     exit(ERR_INVALID_OPERAND_OPCODE);
                 }
@@ -528,23 +588,43 @@ static void generate_line(Bytecode_t *bc, uint8_t *sf_asm, Token_t **curr_token_
         (*curr_token_dbl_ptr)++;
     }
 
-    if (return_buf[0] == ADDR_MODE_IMP ||
-        return_buf[0] == ADDR_MODE_ACCUM_GEN) {
+    // if OPC LABEL but instruction is not branch, change to absolute addressing
+    if (!is_branch_instruction(opcode) && return_buf[3] == ADDR_MODE_REL) {
+        return_buf[3] = ADDR_MODE_ABS;
+    }
+
+    return_buf[0] = (*ptr_arr[opcode])(opcode, return_buf[3]);
+    
+    if (return_buf[0] == 0xFF) {
+        fprintf(stderr, "Invalid addressing mode at line %d\n", curr_line);
+        exit(ERR_INVALID_ADDRESSING_MODE);
+    }
+
+    if (return_buf[3] == ADDR_MODE_REL) {
+    // if offset will overflow beyond -128 or 127, error out
+        if (((((return_buf[2] << 8)|return_buf[1]) > (bc->load_address + bc->index + 1)) &&
+            (((return_buf[2] << 8)|return_buf[1]) - (bc->load_address + bc->index + 1) > 0x7F)) || 
+            ((((return_buf[2] << 8)|return_buf[1]) < (bc->load_address + bc->index + 1)) &&
+            ((bc->load_address + bc->index + 1) - ((return_buf[2] << 8)|return_buf[1])) > 0x80)) {
+            fprintf(stderr, "Error at line %d: branch offsets may be at most -128 or 127 bytes away\n", (*curr_token_dbl_ptr)->line_num);
+            exit(ERR_OVERFLOW);
+        }
+
+        return_buf[1] = ((return_buf[2] << 8)|return_buf[1]) - (bc->load_address + bc->index + 2); // bc->start + bc->index + 2 = previously filled entries plus where pc will be after running INST LABEL line
+    }
+
+    if (return_buf[3] == ADDR_MODE_IMP ||
+        return_buf[3] == ADDR_MODE_ACCUM_GEN) {
         return_buf[3] = 1;
-    } else if (return_buf[0] == ADDR_MODE_ABS ||
-                return_buf[0] == ADDR_MODE_ABS_Y ||
-                return_buf[0] == ADDR_MODE_ABS_X ||
-                return_buf[0] == ADDR_MODE_IND) {
+    } else if (return_buf[3] == ADDR_MODE_ABS ||
+                return_buf[3] == ADDR_MODE_ABS_Y ||
+                return_buf[3] == ADDR_MODE_ABS_X ||
+                return_buf[3] == ADDR_MODE_IND) {
         return_buf[3] = 3;
     } else {
         return_buf[3] = 2;
     }
 
-    return_buf[0] = (*ptr_arr[opcode])(opcode, return_buf[0]);
-    if (return_buf[0] == 0xFF) {
-        fprintf(stderr, "Invalid addressing mode at line %d\n", curr_line);
-        exit(ERR_INVALID_ADDRESSING_MODE);
-    }
 }
 
 /* roll_to_bytecode
@@ -579,12 +659,12 @@ Program_t *clip_to_program(uint8_t *sf_asm, Clip_t *c, Table_t **label_table_dbl
     uint8_t *opcode_operand_buf = (uint8_t *)malloc(4);
 
     for (int i = 0; i < c->index; i++) {
-        // default roll at 0x8000 may be empty
-        if (c->start[i].index == 0) {
+        // skip empty rolls
+        if (c->start[i].start[0].type == TOKEN_END) {
             continue;
         }
         open_bytecode(p, c->start[i].start_address, c->start[i].start->line_num);
-        roll_to_bytecode(p->start + p->index - 1, c->start + c->index - 1, sf_asm, label_table_dbl_ptr);
+        roll_to_bytecode(p->start + p->index - 1, c->start + i, sf_asm, label_table_dbl_ptr);
     }
 
     return p;

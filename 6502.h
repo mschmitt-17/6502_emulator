@@ -112,6 +112,7 @@
 #define ADDR_MODE_IMP               (0x08) // for parsing only
 #define ADDR_MODE_ACCUM_GEN        (0x09) // for parsing only
 #define ADDR_MODE_ZPG_Y_GEN        (0x0A) // for parsing only
+#define ADDR_MODE_REL               (0x0B) // addressing for OPC LABEL; not necessarily relative
 #define ADDR_MODE_IND               (0x0E) // only for indirect jump instruction
 
 

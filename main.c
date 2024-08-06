@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
     uint8_t *sf_asm = read_file(argv[1]);
     Table_t *label_table = new_table(TABLE_INIT_SIZE);
 
-    Clip_t *c = assembly_to_clip(sf_asm, &label_table);
+    Clip_t *c = assembly_to_clip(sf, sf_asm, &label_table);
     Program_t *p = clip_to_program(sf_asm, c, &label_table);
     
     for (int i = 0; i < p->index; i++) {

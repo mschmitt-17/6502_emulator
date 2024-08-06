@@ -83,7 +83,7 @@ void close_roll(Roll_t *r) {
 Clip_t* new_clip(uint32_t size) {
     Clip_t *c = (Clip_t *)malloc(sizeof(Clip_t));
     c->start = (Roll_t *)malloc(size * sizeof(Roll_t));
-    init_roll(c->start, ROLL_INIT_SIZE, ROM_START);
+    init_roll(c->start, ROM_START, ROLL_INIT_SIZE);
     c->index = 1;
     c->size = size;
     return c;
@@ -133,6 +133,6 @@ void open_roll(Clip_t *c, uint16_t start_address, uint32_t line_num) {
             exit(ERR_NO_MEM);
         }
     }
-    init_roll(c->start + c->index, ROLL_INIT_SIZE, start_address);
+    init_roll(c->start + c->index, start_address, ROLL_INIT_SIZE);
     c->index++;
 }

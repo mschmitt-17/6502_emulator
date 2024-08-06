@@ -145,10 +145,15 @@ int add_to_table(Table_t **t_dbl_ptr, char *key, uint16_t value) {
  *      OUTPUTS: value corresponding to passed key
  *      SIDE EFFECTS: will stay in infinite loop if key is not present in table
  */
-uint16_t get_value(Table_t *t, char *key) {
+uint32_t get_value(Table_t *t, char *key) {
     uint32_t index = RSHash(key, strlen(key)) % t->size;
-    while (strcmp(t->data[index].key, key)) {
+    while (1) {
+        if (t->data[index].key == NULL) {
+            break;
+        } else if (!strcmp(t->data[index].key, key)) {
+            return t->data[index].value;
+        }
         index = (index + JSHash(key, strlen(key))) % t->size;
     }
-    return t->data[index].value;
+    return -1; // since this is uint32_t -1, this won't correspond to an actual address
 }

@@ -112,3 +112,28 @@ uint8_t *read_file(const char *file_path) {
 
     return sf_asm;
 }
+
+/* validate_label
+ *      DESCRIPTION: since labels may only contain select characters (source: ChatGPT), this helper validates all characters in a label
+ *      INPUTS: curr_char_ptr -- pointer to beginning character of label
+ *              token_len -- number of characters in label
+ *      OUTPUTS: 1 if label is valid, 0 if label is invalid
+ *      SIDE EFFECTS: none
+ */
+uint8_t validate_label(uint8_t *curr_char_ptr, uint8_t token_len) {
+    int i = 0;
+    
+    if (token_len >= 1) {
+        if (!is_letter(curr_char_ptr[i]) && curr_char_ptr[i] != '_') {
+            return 0;
+        }
+        i++;
+    }
+    
+    for (i; i < token_len; i++) {
+        if (!is_letter(curr_char_ptr[i]) && !is_decimal_number(curr_char_ptr[i]) && curr_char_ptr[i] != '_') {
+            return 0;
+        }
+    }
+    return 1;
+}

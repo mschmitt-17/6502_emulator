@@ -63,7 +63,7 @@ static int accum_addressing(uint8_t opcode, uint8_t addressing_mode) {
  *      SIDE EFFECTS: none
  */
 static int relative_addressing(uint8_t opcode, uint8_t addressing_mode) {
-    if (addressing_mode == ADDR_MODE_ABS) { // ABS and relative addressing are syntactically the same
+    if (addressing_mode == ADDR_MODE_REL) {
         return opcode;
     }
     return -1;

@@ -7,3 +7,5 @@ LOOP 	ADC $BABE	; add one multiplier value with accumulator
 	DEX		; decrement x_index
 	BNE LOOP	; branch on nonzero back to add instruction
 	BRK		; break at end so we don't run over
+	.END
+	LDX #$69	; this line should be ignored

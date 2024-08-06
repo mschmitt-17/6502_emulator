@@ -19,6 +19,6 @@ typedef struct Table {
 Table_t *new_table(uint32_t size);
 void free_table(Table_t *t);
 int add_to_table(Table_t **t_dbl_ptr, char *key, uint16_t value);
-uint16_t get_value(Table_t *t, char *key);
+uint32_t get_value(Table_t *t, char *key);
 
 #endif

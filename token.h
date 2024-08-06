@@ -5,6 +5,8 @@
 
 // type of token
 typedef enum {
+    TOKEN_EMPTY = 0,
+    TOKEN_PENDING,
     TOKEN_OPERAND,
     TOKEN_INSTRUCTION,
     TOKEN_LABEL,

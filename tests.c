@@ -1348,7 +1348,7 @@ static int CPY_TEST(sf_t *sf) {
     sf->memory[ROM_START] = OP_CPY;
     sf->memory[ROM_START + 1] = 0x92;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 1, 0)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 1, 1)) {
         return -1;
     }
 
@@ -1358,7 +1358,7 @@ static int CPY_TEST(sf_t *sf) {
     sf->memory[ROM_START + 1] = 0x41;
     sf->memory[0x41] = 0xFE;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
@@ -1369,7 +1369,7 @@ static int CPY_TEST(sf_t *sf) {
     sf->memory[ROM_START + 2] = 0x13;
     sf->memory[0x1367] = 0x02;
     process_line(sf);
-    if (check_flags(sf->status, 1, 2, 2, 2, 2, 0, 0)) {
+    if (check_flags(sf->status, 1, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -1385,7 +1385,7 @@ static int CMP_TEST(sf_t *sf) {
     sf->memory[0x84] = 0x25;
     sf->memory[0x2549] = 0x02;
     process_line(sf);
-    if (check_flags(sf->status, 1, 2, 2, 2, 2, 0, 1)) {
+    if (check_flags(sf->status, 1, 2, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
@@ -1395,7 +1395,7 @@ static int CMP_TEST(sf_t *sf) {
     sf->memory[ROM_START + 1] = 0xD2;
     sf->memory[0xD2] = 0x13;
     process_line(sf);
-    if (check_flags(sf->status, 1, 2, 2, 2, 2, 0, 0)) {
+    if (check_flags(sf->status, 1, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -1404,7 +1404,7 @@ static int CMP_TEST(sf_t *sf) {
     sf->memory[ROM_START] = OP_CMP | (ADDR_MODE_IMM << 2);
     sf->memory[ROM_START + 1] = 0xB6;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 1, 0)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 1, 1)) {
         return -1;
     }
 
@@ -1415,7 +1415,7 @@ static int CMP_TEST(sf_t *sf) {
     sf->memory[ROM_START + 2] = 0x7D;
     sf->memory[0x7DD9] = 0x24;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 0)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -1428,7 +1428,7 @@ static int CMP_TEST(sf_t *sf) {
     sf->memory[0xAA] = 0x06;
     sf->memory[0x067E] = 0xFF;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 0)) {
         return -1;
     }
     
@@ -1439,7 +1439,7 @@ static int CMP_TEST(sf_t *sf) {
     sf->memory[ROM_START + 1] = 0x4B;
     sf->memory[0x5C + 0x4B] = 0x01;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 0)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -1450,7 +1450,7 @@ static int CMP_TEST(sf_t *sf) {
     sf->memory[ROM_START + 2] = 0x10;
     sf->memory[0x1001 + 0xF0] = 0x01;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 0)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -1461,7 +1461,7 @@ static int CMP_TEST(sf_t *sf) {
     sf->memory[ROM_START + 2] = 0x20;
     sf->memory[0x2002 + 0x12] = 0x01;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 0)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -1516,7 +1516,7 @@ static int CPX_TEST(sf_t *sf) {
     sf->memory[ROM_START] = OP_CPX;
     sf->memory[ROM_START + 1] = 0x92;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 1, 0)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 1, 1)) {
         return -1;
     }
 
@@ -1526,7 +1526,7 @@ static int CPX_TEST(sf_t *sf) {
     sf->memory[ROM_START + 1] = 0x41;
     sf->memory[0x41] = 0xFE;
     process_line(sf);
-    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 1)) {
+    if (check_flags(sf->status, 0, 2, 2, 2, 2, 0, 0)) {
         return -1;
     }
 
@@ -1537,7 +1537,7 @@ static int CPX_TEST(sf_t *sf) {
     sf->memory[ROM_START + 2] = 0x13;
     sf->memory[0x1367] = 0x02;
     process_line(sf);
-    if (check_flags(sf->status, 1, 2, 2, 2, 2, 0, 0)) {
+    if (check_flags(sf->status, 1, 2, 2, 2, 2, 0, 1)) {
         return -1;
     }
 
@@ -1738,7 +1738,7 @@ int run_opcode_tests(sf_t *sf) {
     assert(run_opcode_test(sf, LDA_TEST, "LDA_TEST") == 0);
     assert(run_opcode_test(sf, LDX_TEST, "LDX_TEST") == 0);
     assert(run_opcode_test(sf, CPY_TEST, "CPY_TEST") == 0);
-    //assert(run_opcode_test(sf, CMP_TEST, "CMP_TEST") == 0);
+    assert(run_opcode_test(sf, CMP_TEST, "CMP_TEST") == 0);
     assert(run_opcode_test(sf, DEC_TEST, "DEC_TEST") == 0);
     assert(run_opcode_test(sf, CPX_TEST, "CPX_TEST") == 0);
     assert(run_opcode_test(sf, SBC_TEST, "SBC_TEST") == 0);

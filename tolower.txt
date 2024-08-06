@@ -1,0 +1,42 @@
+; test program courtesy of https://en.wikipedia.org/wiki/MOS_Technology_6502
+
+	.ORG	$0600
+			; load word into SRC
+	LDX	#$43	; C
+	STX	$0400
+	LDX	#$41	; A
+	STX	$0401
+	LDX	#$46	; F
+	STX	$0402
+	LDX	#$45	; E
+	STX	$0403
+	LDX	#$00	; \0
+	STX	$0404
+
+			; convert string to lowercase
+TOLOWER	LDY	#$00	; start at index 0
+LOOP	LDA	(SRC),Y	; load character into accumulator
+	BEQ	DONE	; if character is null go to DONE
+
+	CMP	#$41	; if lower than 'A', don't convert
+	BCC	SKIP
+
+	CMP	#$5B	; if greater than 'Z', don't convert
+	BCS	SKIP
+
+	ORA	#$20	; convert to lowercase
+
+SKIP	STA	(DST),Y	; store accumulator in destination
+	INY		; increment index
+	BNE	LOOP	; if index hasn't overflowed loop back
+	
+	SEC		; if overflow set carry flag
+	BRK		; break
+
+DONE	STA (DST),Y	; store null-termination
+	BRK		; break
+
+	.ORG 	$0080
+
+SRC	.WORD	$0400
+DST	.WORD	$0500

@@ -13,6 +13,8 @@
 #define ERR_EARLY_REF                   0x07
 #define ERR_OVERFLOW                    0x08
 #define ERR_NO_FILE                     0x09
+#define ERR_INVALID_LABEL               0x0A
+#define ERR_LABEL_ADDRESSING            0x0B
 
 /*
  * 6502 memory map according to ChatGPT:
@@ -33,5 +35,6 @@ uint8_t is_decimal_number(uint8_t curr_char);
 uint8_t is_hex_number(uint8_t curr_char);
 uint8_t char_to_hex(uint8_t curr_char);
 uint8_t *read_file(const char *file_path);
+uint8_t validate_label(uint8_t *curr_char_ptr, uint8_t token_len);
 
 #endif

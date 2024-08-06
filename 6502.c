@@ -355,7 +355,7 @@ static void LDX_operation(sf_t *sf, uint8_t *operand) {
  *      SIDE EFFECTS: sets carry, zero, and negative flags according to comparison result
  */
 static void CPY_operation(sf_t *sf, uint8_t *operand) {
-    if (sf->y_index < *operand) {
+    if (sf->y_index >= *operand) {
         sf->status |= (1 << CARRY_INDEX);
     } else {
         sf->status &= ~(1 << CARRY_INDEX);
@@ -373,7 +373,7 @@ static void CPY_operation(sf_t *sf, uint8_t *operand) {
  *      SIDE EFFECTS: none
  */
 static void CMP_operation(sf_t *sf, uint8_t *operand) {
-    if (sf->accumulator < *operand) {
+    if (sf->accumulator >= *operand) {
         sf->status |= (1 << CARRY_INDEX);
     } else {
         sf->status &= ~(1 << CARRY_INDEX);
@@ -403,7 +403,7 @@ static void DEC_operation(sf_t *sf, uint8_t *operand) {
  *      SIDE EFFECTS: modifies carry, negative, and zero flags
  */
 static void CPX_operation(sf_t *sf, uint8_t *operand) {
-    if (sf->x_index < *operand) {
+    if (sf->x_index >= *operand) {
         sf->status |= (1 << CARRY_INDEX);
     } else {
         sf->status &= ~(1 << CARRY_INDEX);
