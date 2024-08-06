@@ -1,7 +1,7 @@
 #ifndef TESTS_H
 #define TESTS_H
 
-#include "6502.h"
+#include "../6502.h"
 
 #define TEST_MAGIC  0b10101100
 #define MAGIC_ONE   0x12

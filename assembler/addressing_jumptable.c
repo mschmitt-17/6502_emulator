@@ -1,5 +1,5 @@
 #include "addressing_jumptable.h"
-#include "6502.h"
+#include "../6502.h"
 
 /* implied_addressing
  *      DESCRIPTION: validates opcode-addressing mode pair for implied addressing

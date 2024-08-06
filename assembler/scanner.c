@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "lib.h"
+#include "../lib/lib.h"
 #include "scanner.h"
 
 #define CLIP_INIT_SIZE      256

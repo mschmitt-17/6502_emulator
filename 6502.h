@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "bytecode.h"
+#include "assembler/bytecode.h"
 
 #define MEMORY_SIZE     (65536)
 #define IRQ_ADDRESS     (0xFFFE)

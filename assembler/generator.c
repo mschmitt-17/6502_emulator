@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "lib.h"
+#include "../lib/lib.h"
 #include "generator.h"
-#include "6502.h"
+#include "../6502.h"
 #include "addressing_jumptable.h"
 #include "table.h"
 

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "lib.h"
+#include "../lib/lib.h"
 #include "token.h"
 
 #define CLIP_GROWTH_FACTOR      2

@@ -2,8 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "lib.h"
 #include "6502.h"
+#include "lib/lib.h"
 
 /* load_bytecode
  *      DESCRIPTION: loads bytecode at passed address in memory

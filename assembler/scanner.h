@@ -4,7 +4,7 @@
 #define DIRECTIVE_ORG   0x01
 #define DIRECTIVE_ERROR 0xFF
 
-#include "6502.h"
+#include "../6502.h"
 #include "token.h"
 #include "table.h"
 

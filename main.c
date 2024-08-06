@@ -2,10 +2,10 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "tests.h"
-#include "lib.h"
-#include "generator.h"
-#include "scanner.h"
+#include "test_code/tests.h"
+#include "lib/lib.h"
+#include "assembler/generator.h"
+#include "assembler/scanner.h"
 
 #define TABLE_INIT_SIZE         256
 

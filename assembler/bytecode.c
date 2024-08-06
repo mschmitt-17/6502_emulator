@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "lib.h"
+#include "../lib/lib.h"
 #include "bytecode.h"
 
 #define BYTECODE_GROWTH_FACTOR  2

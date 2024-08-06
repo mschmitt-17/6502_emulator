@@ -2,8 +2,8 @@
 #include <assert.h>
 
 #include "tests.h"
-#include "lib.h"
-#include "table.h"
+#include "../lib/lib.h"
+#include "../assembler/table.h"
 
 /* OPCODE TESTS */
 
