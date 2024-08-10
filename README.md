@@ -16,4 +16,4 @@ FreeType: sudo apt-get install libfreetype-dev, sudo apt-get install libfreetype
 **Assembler Directives Currently Supported:**\
 .END: ignore all assembly after this directive\
 .ORG $XXXX: load subsequent lines of code starting at address XXXX\
-.WORD $HHLL: load word (LL \_then\* HH loaded)
+.WORD $HHLL: load word (LL _then_ HH loaded)
