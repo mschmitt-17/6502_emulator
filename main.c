@@ -227,7 +227,7 @@ int main(int argc, char* argv[]) {
     char status_str[13] = "Status: 0x00";
     char esp_str[22] = "Stack Pointer: 0x0000";
     char pc_str[11] = "PC: 0x0000";
-    char memory_string[16] = "0x0000: 0x0000";
+    char memory_string[16] = "0x0000: 0x00";
 
     // initialize and configure GLFW
     glfwInit();
@@ -397,7 +397,7 @@ int main(int argc, char* argv[]) {
         render_text(text_shader, "Memory:", 2.0f, memory_quads[0].y + memory_quads[0].height, 1.0f, (vec3){1.0f, 0.0f, 0.0f}, VAO_text, VBO_text);
         for (int i = 0; i < NUM_MEM_LOCATIONS; i++) {
             fill_string(memory_string + 2, starting_memory_location + i, 4);
-            fill_string(memory_string + 10, sf->memory[starting_memory_location + i], 4);
+            fill_string(memory_string + 10, sf->memory[starting_memory_location + i], 2);
             // render background
             glBindVertexArray(VAO_quad);
             glUniformMatrix4fv(glGetUniformLocation(text_shader, "projection"), 1, GL_FALSE, (float *)projection);
