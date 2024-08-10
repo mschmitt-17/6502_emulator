@@ -15,6 +15,7 @@
 #define ERR_NO_FILE                     0x09
 #define ERR_INVALID_LABEL               0x0A
 #define ERR_LABEL_ADDRESSING            0x0B
+#define ERR_GRAPHICS                    0x0C
 
 /*
  * 6502 memory map according to ChatGPT:

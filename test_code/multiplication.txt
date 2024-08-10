@@ -1,3 +1,5 @@
+; multiplication
+; multiplies value loaded into x_index (6) with value loaded into y_index (7)
 	LDX #$06 	; load x_index with one value to be multiplied
 	LDY #$07 	; load y_index with other value to be multiplied
 	TYA		; transfer y_index to accumulator
@@ -6,6 +8,7 @@
 LOOP 	ADC $BABE	; add one multiplier value with accumulator
 	DEX		; decrement x_index
 	BNE LOOP	; branch on nonzero back to add instruction
-	BRK		; break at end so we don't run over
+END_LOOP	LDX #$00
+		BEQ END_LOOP
 	.END
 	LDX #$69	; this line should be ignored

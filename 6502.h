@@ -110,8 +110,8 @@
 #define ADDR_MODE_ABS_Y             (0x06)
 #define ADDR_MODE_ABS_X             (0x07)
 #define ADDR_MODE_IMP               (0x08) // for parsing only
-#define ADDR_MODE_ACCUM_GEN        (0x09) // for parsing only
-#define ADDR_MODE_ZPG_Y_GEN        (0x0A) // for parsing only
+#define ADDR_MODE_ACCUM_GEN         (0x09) // for parsing only
+#define ADDR_MODE_ZPG_Y_GEN         (0x0A) // for parsing only
 #define ADDR_MODE_REL               (0x0B) // addressing for OPC LABEL; not necessarily relative
 #define ADDR_MODE_IND               (0x0E) // only for indirect jump instruction
 
@@ -127,7 +127,7 @@
 #define ABS_Y_MEM_ACCESS    (sf->memory[(((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->y_index) % 0xFFFF]) // has carry, but can't have result outside address space
 #define ABS_X_MEM_ACCESS    (sf->memory[(((sf->memory[sf->pc + 2] << 8)|sf->memory[sf->pc + 1]) + sf->x_index) % 0xFFFF])
 
-
+/* struct for 6502 processor */
 typedef struct sf {
     uint8_t accumulator;
     uint8_t x_index;
@@ -138,13 +138,8 @@ typedef struct sf {
     uint8_t memory[MEMORY_SIZE];
 } sf_t;
 
-/* loads passed number of bytes from bytecode to passed load address */
 void load_bytecode(sf_t *sf, Bytecode_t *bc, uint16_t load_address, uint32_t num_bytes);
-
-/* initializes registers to all zeroes, to be called before game is run */
 void initialize_regs(sf_t *sf, uint16_t pc_init);
-
-/* executes one instruction (pass sf since different addressing = different bytes for instruction) */
 void process_line(sf_t *sf);
 
 #endif

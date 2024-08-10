@@ -1,8 +1,9 @@
 CC = gcc
-CFLAGS = -g
-files = $(wildcard *.c) $(wildcard */*.c)
+CFLAGS = -g -lglfw -ldl -I/usr/include/freetype2 -lfreetype
+cfiles = $(wildcard *.c) $(wildcard */*.c)
 
-main: $(files)
+all:
+	$(CC) $(cfiles) -o main $(CFLAGS)
 
 clean:
 	rm -f *.o
