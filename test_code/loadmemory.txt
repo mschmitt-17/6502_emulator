@@ -1,3 +1,4 @@
+; load memory with words for readme image
 	.ORG	$0600
 	.WORD	$FECA
 	.WORD	$BEBA
